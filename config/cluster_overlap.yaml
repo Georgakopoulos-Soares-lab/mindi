@@ -1,0 +1,10 @@
+# cluster.yaml
+#
+__default__:
+        time: "48:00:00"
+        mem: "20GB"
+        ncpus: 1
+        nodes: 1
+        partition: "open"
+        jobName: "YasQueen"
+

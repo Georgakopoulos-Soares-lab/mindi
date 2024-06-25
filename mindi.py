@@ -1,0 +1,528 @@
+# Non B-DNA extractor
+
+import subprocess
+import pandas as pd
+import csv
+import tempfile
+from pathlib import Path
+import functools
+import re
+from typing import ClassVar, Optional, Callable, Iterator
+from dotenv import load_dotenv
+from tailhunter import hunt_tail
+import os
+import gzip
+from utils import parse_fasta
+from dataclasses import dataclass
+import shutil
+import uuid
+
+@dataclass
+class Defaults:
+
+    minrep: int = 8
+    spacer_length: int = 8
+    min_arm_length: int = 8
+    max_sru: int = 9
+    min_consensus_repeats: int = 3
+
+extract_id = lambda accession: '_'.join(Path(accession).name.split('_')[:2])
+extract_name = lambda accession: Path(accession).name.split('.fna')[0]
+
+def nonbdna_register(mode):
+    def nonbdna(func):
+        @functools.wraps(func)
+        def wrapper(self, *args, **kwargs):
+            global extract_name
+
+            self.reset()
+            if 'accession' in kwargs:
+                accession = kwargs['accession']
+            else:
+                accession = args[0]
+
+            accession = Path(accession).resolve()
+            if not accession.is_file():
+                raise FileNotFoundError(f'Unable to detect accession {accession}.')
+
+            accession_name = extract_name(accession)
+
+            # accession_tmp_dir = self.tempdir.joinpath(accession_name)
+            accession_tmp_dir = tempfile.TemporaryDirectory(delete=True, prefix=mode)
+            accession_tmp_dir_path = self.tempdir.joinpath(accession_tmp_dir.name)
+
+            # if accession_tmp_dir.is_dir():
+            #    shutil.rmtree(accession_tmp_dir)
+
+            cur_dir = os.getcwd()
+            
+            if 'minrep' in kwargs:
+                minrep = kwargs['minrep']
+            elif len(args) > 1:
+                minrep = args[1]
+            else:
+                # fallback to default
+                minrep = int(Defaults.minrep)
+
+            # handle zipped files
+            if accession.name.endswith(".gz"):
+
+                # gzip compression strategy
+                with tempfile.NamedTemporaryFile(dir=accession_tmp_dir_path, delete=False, suffix='.fna') as unzipped_tmp:
+
+                    with gzip.open(accession, 'rb') as handler:
+                        unzipped_tmp.write(handler.read())
+
+                    accession = unzipped_tmp.name
+            
+            elif accession.name.endswith(".lz"):
+
+                # different compression strategy
+                raise NotImplementedYet()
+
+            os.chdir(accession_tmp_dir_path)
+            out_tsv = accession_tmp_dir_path.joinpath(accession_name + f'_{mode}.tsv')
+            out_gff = accession_tmp_dir_path.joinpath(accession_name + f'_{mode}.gff')
+            # rand_accession_name = str(uuid.uuid4())
+
+            match mode:
+                case 'IR':
+                    command = f"{self.nonBDNA} -seq {accession} -out {accession_name} -minIRrep {minrep} -skipAPR -skipSTR -skipMR -skipDR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
+                case 'MR':
+                    command = f"{self.nonBDNA} -seq {accession} -out {accession_name} -minMRrep {minrep} -skipAPR -skipSTR -skipIR -skipDR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
+                case 'DR':
+                    raise NotImplementedYet('Direct Repeats Finder is not currently supported by this version of Mindi.')
+                case 'STR':
+                    raise NotImplementedYet('Short Tandem Repeats are not supported yet!')
+                case _:
+                    raise ValueError(f'Unknown mode {mode}.')
+            
+            _ = subprocess.run(command, shell=True, 
+                                        check=True,
+                                        stdout=subprocess.DEVNULL,
+                                        stderr=subprocess.DEVNULL,
+                                )
+
+            # check operation was succesful
+            if not Path(out_tsv).is_file():
+                raise FileNotFoundError(f"Failed to extract {mode} for {accession}.")
+
+            destination = self.tempdir.joinpath(accession_name + f'_{mode}.tsv')
+            if destination.is_file():
+                os.remove(destination)
+            
+            shutil.move(out_tsv, destination)
+
+            # remove redundant files
+            os.unlink(out_gff)
+
+            # os.chdir('..')
+            # shutil.rmtree(accession_tmp_dir)
+            os.chdir(cur_dir)
+
+            # os.unlink(accession)
+            self.fn = self.tempdir.joinpath(accession_name + f'_{mode}.tsv')
+            result = func(self, *args, **kwargs)
+
+            accession_tmp_dir.cleanup()
+
+            return result
+        return wrapper
+    return nonbdna
+
+
+class MindiHunter:
+    
+    MINDI_FIELDS: ClassVar[list[str]] = [
+                                         "seqID", 
+                                         "start", 
+                                         "end", 
+                                         "sequenceOfArm", 
+                                         "sequenceOfSpacer", 
+                                         "sequence", 
+                                         "armLength", 
+                                         "spacerLength", 
+                                         "length", 
+                                         "arm_a", 
+                                         "arm_c", 
+                                         "arm_g", 
+                                         "arm_t"
+                                         ]
+
+    REGEX_FIELDS: ClassVar[list[str]] = [
+                    "seqID",
+                    "start",
+                    "end",
+                    "sequence",
+                    "strand",
+                    "gc_content",
+                    "length",
+                    "stackerLength",
+                    "spacerLength",
+                    ]
+
+    FRAME_FIELDS: ClassVar[list[str]] = [
+                             "seqID", 
+                             "start", 
+                             "end", 
+                             "sequenceOfArm", 
+                             "sequenceOfSpacer", 
+                             "sequence", 
+                             "armLength", 
+                             "spacerLength", 
+                             "sequenceLength",
+                             "arm_a",
+                             "arm_g",
+                             "arm_c",
+                             "arm_t",
+                             "composition"
+                          ]
+
+    HDNA_max_at_content: ClassVar[float] = 0.8
+    HDNA_min_pyrine: ClassVar[float] = 0.9
+    HDNA_max_pyrine: ClassVar[float] = 0.9
+
+    def __init__(self, tempdir: Optional[str] = None, nonBDNA: Optional[str] = None, RTRF: Optional[str] = None) -> None:
+        load_dotenv()
+        if nonBDNA is None:
+            nonBDNA = os.getenv('nonBDNA')
+
+        if RTRF is None:
+            RTRF = os.getenv('RTRF')
+
+        if tempdir is None:
+            self.tempdir = Path().cwd()
+        else:
+            self.tempdir = Path(tempdir).resolve()
+            self.tempdir.mkdir(exist_ok=True)
+
+        self.nonBDNA = nonBDNA
+        self.RTRF = RTRF
+        self.cur_mode = None
+        self.fn = None
+        self.fnp = None
+
+        if not Path(self.nonBDNA).is_file():
+            raise FileNotFoundError(f"Invalid executable path {self.nonBDNA}.")
+
+    def reset(self) -> None:
+        self.fn = None
+        self.fnp = None
+        self.cur_mode = None
+
+    def moveto(self, dest: os.PathLike[str]) -> None:
+        shutil.move(self.fnp, dest)
+    
+    def to_dataframe(self, usecols: bool = True) -> pd.DataFrame:
+        # STILL EXPERIMENTAL
+        if self.cur_mode == 'RE':
+            tmp_file = self.fn
+        else:
+            tmp_file = self.fnp
+
+        if usecols:
+            mindi_frame = pd.read_table(tmp_file)
+
+            if self.cur_mode == "IR" or self.cur_mode == "DI" or self.cur_mode == "MR":
+                mindi_frame.loc[:, "sequenceOfSpacer"] = mindi_frame["sequenceOfSpacer"].fillna(".")
+
+        else:
+            mindi_frame = pd.read_table(tmp_file, header=None, skiprows=1)
+
+        return mindi_frame
+
+    def set_tempdir(self, tempdir: os.PathLike[str]) -> None:
+        self.tempdir = Path(tempdir).resolve()
+        self.tempdir.mkdir(exist_ok=True)
+    
+    @nonbdna_register(mode='IR')
+    def extract_inverted(self, accession: os.PathLike[str], 
+                        minrep: int = 8, 
+                        min_arm_length: Optional[int] = None, 
+                        max_spacer_length: Optional[int] = None,
+               ) -> "MindiHunter":
+
+       mindi_table = self.process_table(
+                    min_arm_length=min_arm_length, 
+                    max_spacer_length=max_spacer_length
+                    )
+       self.cur_mode = 'IR'
+       return self
+
+    @nonbdna_register(mode='MR') 
+    def extract_mirror(self,    accession: os.PathLike[str], 
+                                minrep: int = 8, 
+                                arm_length: Optional[int] = None, 
+                                spacer_length: Optional[int] = None,
+                            ) -> "MindiHunter":
+        mindi_table = self.process_table(min_arm_length=arm_length, max_spacer_length=spacer_length)
+        self.cur_mode = 'MR'
+        return self
+
+    def filter_hdna(self) -> pd.DataFrame:
+        # assert current extraction is of mode 'Mirror Repeat'
+        if self.cur_mode != 'MR':
+            raise ValueError(f"Invalid mode '{mode}' for hdna filtering.")
+
+        mindi_table = pd.read_table(self.fnp)
+        mindi_table.loc[:, "pyrine"] = mindi_table["sequence"].str.count("a|g")
+        mindi_table.loc[:, "pyrimidine"] = mindi_table["sequence"].str.count("c|t")
+        mindi_table.loc[:, "at_content"] = mindi_table["sequence"].str.count("a|t")
+
+        mindi_table = mindi_table[(mindi_table["at_content"] <= 0.8) & ((mindi_table["pyrimidine"] >= 0.9) | (mindi_table["pyrine"] >= 0.9))]
+
+        return mindi_table
+
+    def extract_regex(self, accession: os.PathLike[str], 
+                            stacker: str = "g", 
+                            minrep: int = 3,
+                            multiplicity: int = 3) -> "MindiHunter":
+
+        self.cur_mode = "RE"
+        regex = RegexExtractor(stacker=stacker, 
+                               minrep=minrep, 
+                               multiplicity=multiplicity)
+
+
+        # global extract_name
+        # accession_name = extract_name(accession)
+        # accession_tmp_dir = self.tempdir.joinpath(accession_name)
+
+        with tempfile.NamedTemporaryFile(dir=self.tempdir, delete=False, suffix=".re", mode="w") as file:
+            dict_writer = csv.DictWriter(file, delimiter="\t", fieldnames=MindiHunter.REGEX_FIELDS)
+            dict_writer.writeheader()
+
+            for table in regex.parse_regex(accession):
+                for row in table:
+                    dict_writer.writerow(row)
+
+            self.fn = file.name
+
+        return self
+
+
+    def cleanup(self) -> None:
+        if self.fnp and Path(self.fnp).is_file():
+            os.remove(self.fnp)
+        else:
+            print(colored(f"WARNING! Processed file {self.fnp} does not exist.", "red"))
+
+
+    def filter_cruciform(self) -> pd.DataFrame:
+        # assert current extraction is of mode 'Inverted Repeat'
+        if self.cur_mode != 'IR':
+            raise ValueError(f"Invalid mode '{mode}' for cruciform filtering.")
+
+        mindi_table = pd.read_table(self.fnp)
+        return mindi_table
+
+    @nonbdna_register(mode='STR')
+    def extract_tandem(self, accession: os.PathLike[str], 
+                             min_sru: Optional[int] = None) -> "MindiHunter":
+        raise NotImplementedYet()
+        self._process_RTRF()
+
+    def _process_RTRF(self) -> "MindiHunter":
+        raise NotImplementedYet()
+
+    @nonbdna_register(mode='DR')
+    def extract_direct(self, accession: os.PathLike[str], 
+                    minrep: int = 8,
+                    min_arm_length: Optional[int] = None,
+                    max_spacer_length: Optional[int] = None
+                ) -> "MindiHunter":
+        raise NotImplementedYet()
+
+    def extract_tails(self, accession: os.PathLike[str], minrep: int) -> "MindiHunter":
+        for seqID, sequence in parse_fasta(accession):
+            mononucleotide_repeats = hunt_tail(sequence=sequence, minrepeat=minrep)
+
+            for repeat in mononucleotide_repeats:
+                print(repeat)
+
+        return self
+
+
+
+    def process_table(self, min_arm_length: Optional[int] = None, 
+                            max_spacer_length: Optional[int] = None, 
+                            ) -> "MindiHunter":
+        to_drop = ["Source", "Type", "Score", "Strand", "Subset", "Permutations", "Sequence", "Start", "Stop"]
+
+        tmp_file = tempfile.NamedTemporaryFile(
+                                               dir=self.tempdir, 
+                                               suffix=".tsv", 
+                                               delete=False, 
+                                               mode="w"
+                                            )
+        self.fnp = tmp_file.name
+
+        with tmp_file as fout:
+            fout_writer = csv.DictWriter(
+                                         fout, 
+                                         delimiter="\t", 
+                                         fieldnames=MindiHunter.FRAME_FIELDS
+                                         )
+
+            fout_writer.writeheader()
+
+            with open(self.fn, mode="r", encoding="UTF-8") as fh:
+                reader = csv.DictReader(fh, delimiter="\t")
+
+                for row in reader:
+
+                    arm_length = int(row['Repeat'])
+                    spacer_length = int(row['Spacer'])
+
+                    if (isinstance(min_arm_length, int) and arm_length < min_arm_length) \
+                            or (isinstance(max_spacer_length, int) and spacer_length > max_spacer_length):
+                        continue
+
+                    start = int(row['Start']) - 1
+                    end = int(row['Stop'])
+                    sequence = row['Sequence']
+                    sequence_length = int(row['Length'])
+
+                    total_coordinate_length = end - start
+
+                    if sequence_length < total_coordinate_length:
+                        sequence = sequence[:sequence_length]
+                        end = end - (total_coordinate_length - sequence_length)
+
+                
+                    # find sequence of arm
+                    repeat = int(row['Repeat'])
+                    sequence_of_arm = sequence[:repeat]
+
+                    # find spacer
+                    del row['Spacer']
+                    true_spacer_length = sequence_length - 2 * repeat 
+
+                    # spacer = sequence[repeat:repeat+spacer_length]
+                    true_spacer = sequence[repeat:repeat+true_spacer_length]
+
+                    if len(true_spacer) == 0:
+                        true_spacer = "."
+
+                    # process composition
+                    composition = re.search(r"(\d+)A/(\d+)C/(\d+)G/(\d+)T", row['Composition'])
+
+                    a_content = composition.group(1)
+                    c_content = composition.group(2)
+                    g_content = composition.group(3)
+                    t_content = composition.group(4)
+                
+                    row.update({
+                            "start": start,
+                            "end": end,
+                            "sequenceOfArm": sequence_of_arm,
+                            "sequenceOfSpacer": true_spacer,
+                            "spacer": true_spacer_length,
+                            "sequence": sequence,
+                            "arm_a": a_content,
+                            "arm_c": c_content,
+                            "arm_g": g_content,
+                            "arm_t": t_content,
+                        })
+
+                    for col in to_drop:
+                        del row[col]
+
+                    row["sequenceLength"] = row.pop("Length")
+                    row["seqID"] = row.pop("Sequence_name")
+                    row["armLength"] = row.pop("Repeat")
+                    row["spacerLength"] = row.pop("spacer")
+                    row["composition"] = row.pop("Composition")
+                    fout_writer.writerow(row)
+
+        return self
+
+
+class RegexExtractor:
+
+    def __init__(self, stacker: str = "g", multiplicity: int = 3, minrep: int = 3) -> None:
+        self.stacker = stacker
+        self.multiplicity = multiplicity
+        self.complementary_stacker = RegexExtractor.invert(self.stacker)
+        self.minrep = minrep
+        self.motifs = [
+                       "%s{%s,}[agct]{1,7}" % (self.stacker, self.minrep) * self.multiplicity + "%s{%s,}" % (self.stacker, self.minrep),
+                       "%s{%s,}[agct]{1,7}" % (self.complementary_stacker, self.minrep) * self.multiplicity + "%s{%s,}" % ( self.complementary_stacker, self.minrep)
+                       ]
+
+        self.strict_motif = "%s" % (self.stacker * self.minrep) + "[agct]{1,7}"
+        self.strict_motif = self.strict_motif * self.multiplicity + self.strict_motif
+
+        # self.complementary_strict_motif 
+
+    
+    @staticmethod
+    def complement(nucleotide: str) -> str:
+        match nucleotide:
+            case 'a':
+                return 't'
+            case 't':
+                return 'a'
+            case 'g':
+                return 'c'
+            case 'c':
+                return 'g'
+            case 'n':
+                return 'n'
+            case _:
+                raise ValueError(f'Invalid nucleotide {nucleotide}.')
+
+    @staticmethod
+    def invert(kmer: str) -> str:
+        return ''.join(RegexExtractor.complement(n) for n in kmer)[::-1]
+
+
+    def parse_regex(self, accession: os.PathLike[str]) -> Iterator[list[dict]]:
+        for seqID, seq in parse_fasta(accession):
+
+            for motif in self.motifs:
+                matches = re.finditer(motif, seq)
+                table = []
+
+                for match in matches:
+
+                    sequence = match.group()
+                    gc_content = sequence.count('g') + sequence.count('c')
+                    strand = "+" if sequence.startswith(self.stacker) else "-"
+
+                    if strand == "+":
+                        stacker = self.stacker
+                    else:
+                        stacker = self.complementary_stacker
+
+                    stackers = re.findall("%s{%s,}" % (stacker, self.minrep), sequence)
+                    total_stacker_len = sum(map(len, stackers))
+
+                    spacers = re.sub("%s{%s,}" % (stacker, self.minrep), "|", sequence)
+                    total_spacer_len = sum(map(len, spacers.split("|")))
+
+                    start = match.start()
+                    end = match.end()
+
+                    assert seq[start: end] == sequence, f"Invalid sequence detected at chromosome {seqID} at position ({start},{end})."
+
+                    table.append(
+                        {
+                            "seqID": seqID,
+                            "start": start,
+                            "end": end,
+                            "sequence": sequence,
+                            "strand": strand,
+                            "gc_content": gc_content,
+                            "length": len(sequence),
+                            "stackerLength": total_stacker_len,
+                            "spacerLength": total_spacer_len,
+                        }
+                    )
+
+                table = sorted(
+                               table, 
+                               key=lambda x: (x['seqID'], x['start']), 
+                               reverse=False
+                               )
+                yield table

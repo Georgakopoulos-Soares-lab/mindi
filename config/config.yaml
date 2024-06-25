@@ -1,0 +1,7 @@
+buckets: 2
+out: 'irp_out'
+files: 'filtered_assemblies.txt'
+minrep: 8
+max_spacer_length: 8
+min_arm_length: 10
+

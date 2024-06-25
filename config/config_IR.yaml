@@ -1,0 +1,15 @@
+buckets: 2
+out: 'bed_outl'
+mode: 'IR'
+compartment: 'gene'
+ext_suffix: 'csv'
+suffix: 'csv'
+window_size: 500
+gff_parent: 'transfer/gff'
+admissible: 'transfer/IR'
+schedule: 'filtered_assemblies.txt'
+summary: 'assembly_summary_g4.txt.gz'
+extractions: 'transfer/IR'
+same_strand: 0
+gff_suffix: 'gff.gz'
+
