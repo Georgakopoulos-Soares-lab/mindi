@@ -2,7 +2,9 @@
 
 ## A python wrapper for non-BDNA data scientific analyses.
 
-![MINDI](images/Mindy.png)
+<p align="center">
+  <img width="460" height="300" src="images/Mindy.png">
+</p>
 
 ## Introduction
 
