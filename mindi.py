@@ -48,7 +48,7 @@ def nonbdna_register(mode):
             accession_name = extract_name(accession)
 
             # accession_tmp_dir = self.tempdir.joinpath(accession_name)
-            accession_tmp_dir = tempfile.TemporaryDirectory(delete=True, prefix=mode)
+            accession_tmp_dir = tempfile.TemporaryDirectory(prefix=mode)
             accession_tmp_dir_path = self.tempdir.joinpath(accession_tmp_dir.name)
 
             # if accession_tmp_dir.is_dir():
@@ -348,14 +348,16 @@ class MindiHunter:
                             max_spacer_length: Optional[int] = None, 
                             ) -> "MindiHunter":
         to_drop = ["Source", "Type", "Score", "Strand", "Subset", "Permutations", "Sequence", "Start", "Stop"]
-
+        
         tmp_file = tempfile.NamedTemporaryFile(
                                                dir=self.tempdir, 
+                                               prefix=str(self.fn),
                                                suffix=".tsv", 
                                                delete=False, 
                                                mode="w"
                                             )
         self.fnp = tmp_file.name
+        nucleotides = {'a', 'g', 'c', 't'}
 
         with tmp_file as fout:
             fout_writer = csv.DictWriter(
@@ -373,14 +375,15 @@ class MindiHunter:
 
                     arm_length = int(row['Repeat'])
                     spacer_length = int(row['Spacer'])
+                    sequence = row['Sequence']
 
                     if (isinstance(min_arm_length, int) and arm_length < min_arm_length) \
-                            or (isinstance(max_spacer_length, int) and spacer_length > max_spacer_length):
+                            or (isinstance(max_spacer_length, int) and spacer_length > max_spacer_length) \
+                            or any(n not in nucleotides for n in sequence):
                         continue
 
                     start = int(row['Start']) - 1
                     end = int(row['Stop'])
-                    sequence = row['Sequence']
                     sequence_length = int(row['Length'])
 
                     total_coordinate_length = end - start

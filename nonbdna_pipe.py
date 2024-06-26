@@ -44,6 +44,7 @@ rule schedule:
         total_split = params.buckets
         splitted_batches = {batch_id: job.tolist() for batch_id, job in enumerate(np.array_split(assemblies, total_split))}
         
+        
         Path(out).mkdir(exist_ok=True)
         with open(output[0], mode="w", encoding="UTF-8") as f:
             json.dump(splitted_batches, f, indent=4)
@@ -70,6 +71,7 @@ rule extractInvertedRepeats:
         destination_dir.mkdir(exist_ok=True)
 
         for accession in bucket:
+            print(f'Processing accession {accession}.')
             accession_id = extract_name(accession)
             destination = destination_dir.joinpath(accession_id + ".IR.csv")
 
@@ -87,7 +89,6 @@ rule extractInvertedRepeats:
             for seqID, sequence in parse_fasta(accession):
 
                 temp = irp_df[irp_df['seqID'] == seqID]
-                assert temp.shape[0] > 0
                 total_chr = 1
 
                 total = temp.shape[0]
@@ -112,8 +113,9 @@ rule extractInvertedRepeats:
 
                     section = sequence[start: end]
                     
-                    assert section == derived_seq == arm_seq + spacer_seq + ''.join({'a': 't', 'g': 'c', 'c': 'g', 't': 'a'}[n] for n in arm_seq)[::-1]
-                    assert arm_len * 2 + spacer_len == len(section) == len(derived_seq) == arm_true_len * 2 + spacer_true_len == seq_true_len
+                    assert section == derived_seq == arm_seq + spacer_seq + ''.join({'a': 't', 'g': 'c', 'c': 'g', 't': 'a'}[n] for n in arm_seq)[::-1], f"{accession} on {seqID} - start-end: {start}-{end}."
+                    assert arm_len * 2 + spacer_len == len(section) == len(derived_seq) == arm_true_len * 2 + spacer_true_len == seq_true_len, f"{accession} on {seqID} - start-end: {start}-{end}."
+
                     total_validated += 1
 
                 assert total_validated == total
@@ -130,6 +132,7 @@ rule extractInvertedRepeats:
             #              index=False
             #        )
 
+            print(f'Accession {accession} has been processed succesfully.')
             mindi.moveto(destination)
 
 rule reduceInvertedRepeats:
