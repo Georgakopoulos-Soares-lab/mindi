@@ -33,6 +33,9 @@ class GFFCleaner:
                  ) -> None:
         if tempdir is None:
             tempdir = Path().cwd()
+        else:
+            tempdir = Path(tempdir).resolve()
+            tempdir.mkdir(exist_ok=True)
 
         self.tempdir = tempdir
         pybedtools.set_tempdir(self.tempdir)
@@ -168,7 +171,6 @@ class GFFCleaner:
                                 )
             merged_gff_comp.loc[:, "compartment"] = compartment 
             merged_gff_comp.loc[:, "biotype"] = biotype if biotype else "."
-
             merged_gff.append(merged_gff_comp)
     
         if len(merged_gff) > 0:
@@ -198,6 +200,3 @@ if __name__ == "__main__":
     gff_df = cleaner.read(gff, add_exons=add_exons)
 
     breakpoint()
-
-
-

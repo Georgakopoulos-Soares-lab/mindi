@@ -378,21 +378,18 @@ class MindiHunter:
                     sequence = row['Sequence']
 
                     if (isinstance(min_arm_length, int) and arm_length < min_arm_length) \
-                            or (isinstance(max_spacer_length, int) and spacer_length > max_spacer_length) \
-                            or any(n not in nucleotides for n in sequence):
+                            or (isinstance(max_spacer_length, int) and spacer_length > max_spacer_length):
                         continue
 
                     start = int(row['Start']) - 1
                     end = int(row['Stop'])
                     sequence_length = int(row['Length'])
-
                     total_coordinate_length = end - start
 
                     if sequence_length < total_coordinate_length:
                         sequence = sequence[:sequence_length]
                         end = end - (total_coordinate_length - sequence_length)
 
-                
                     # find sequence of arm
                     repeat = int(row['Repeat'])
                     sequence_of_arm = sequence[:repeat]
@@ -400,10 +397,13 @@ class MindiHunter:
                     # find spacer
                     del row['Spacer']
                     true_spacer_length = sequence_length - 2 * repeat 
+                    right_arm = sequence[repeat+true_spacer_length:]
+
+                    if any(n not in nucleotides for n in right_arm) or any(n not in nucleotides for n in sequence_of_arm):
+                        continue
 
                     # spacer = sequence[repeat:repeat+spacer_length]
                     true_spacer = sequence[repeat:repeat+true_spacer_length]
-
                     if len(true_spacer) == 0:
                         true_spacer = "."
 
