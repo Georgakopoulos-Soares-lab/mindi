@@ -149,7 +149,9 @@ rule extractCoverage:
                                                                        "biotype", 
                                                                        "overlapCount"
                                                                        ]]
-                                                        )
+                                                        )\
+                                                .sort()
+
                 coverage_df = pd.read_table(
                                             compartment_df.coverage(extract_df_temp).fn,
                                             header=None,

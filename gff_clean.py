@@ -107,9 +107,10 @@ class GFFCleaner:
                 gff = tmp.name
 
         if add_exons:
-            with tempfile.NamedTemporaryFile(prefix=gff_name + ".agat", dir=self.tempdir) as tmp:
+            with tempfile.NamedTemporaryFile(prefix=gff_name + ".agat", dir=self.tempdir, delete=True) as tmp:
                 tmp_name = tmp.name
-                command = f"agat_convert_sp_gxf2gxf.pl -g {gff_file} -o {tmp_name}"
+                os.remove(tmp_name)
+                command = f"agat_convert_sp_gxf2gxf.pl -g {gff} -o {tmp_name}"
                 subprocess.run(
                            command, 
                            check=True, 
@@ -117,10 +118,21 @@ class GFFCleaner:
                            stderr=subprocess.DEVNULL, 
                            stdout=subprocess.DEVNULL
                         )
-
                 gff = tmp_name
 
-        gff_df = pd.read_table(
+                gff_df = pd.read_table(
+                            tmp.name,
+                            comment="#",
+                            header=None, 
+                            names=GFFCleaner.GFF_FIELDS,
+                            dtype={
+                                "start": int,
+                                "end": int
+                            }
+                    )
+
+        else:
+            gff_df = pd.read_table(
                             gff,
                             comment="#",
                             header=None, 
@@ -175,6 +187,12 @@ class GFFCleaner:
     
         if len(merged_gff) > 0:
             merged_gff = pd.concat(merged_gff, axis=0)
+            
+            merged_gff.loc[:, "compartment"] = pd.Categorical(merged_gff["compartment"], categories=["region", "gene", "exon", "CDS"], ordered=True)
+            
+            merged_gff = merged_gff.sort_values(by=['seqID', 'start', 'compartment'], ascending=True)\
+                                                      .reset_index(drop=True)
+            merged_gff.loc[:, "compartment"] = merged_gff["compartment"].astype(str)
 
         else: 
             merged_gff = pd.DataFrame([], columns=["seqID", "start", "end", "overlapCount", "compartment", "biotype"])
@@ -189,14 +207,19 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--gff", type=str)
     parser.add_argument("--add_exons", type=int, default=1)
+    parser.add_argument("--bedtools_path", type=str, default="/storage/group/izg5139/default/nicole/miniconda3/bin")
+    parser.add_argument("--tempdir", type=str, default="gff_clean_tmp")
 
-    bedtools_path = "/home/dollzeta/frogtools/bedtools2/bin"
+    # bedtools_path = "/home/dollzeta/frogtools/bedtools2/bin"
+    # bedtools_path = "/storage/group/izg5139/default/nicole/miniconda3/bin"
 
     args = parser.parse_args()
     gff = args.gff
     add_exons = args.add_exons
+    bedtools_path = args.bedtools_path
+    tempdir_path = args.tempdir
 
-    cleaner = GFFCleaner(bedtools_path=bedtools_path)
+    cleaner = GFFCleaner(bedtools_path=bedtools_path, tempdir=tempdir_path)
     gff_df = cleaner.read(gff, add_exons=add_exons)
 
     breakpoint()

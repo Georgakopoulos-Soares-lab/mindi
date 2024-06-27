@@ -5,6 +5,7 @@ import pandas as pd
 import csv
 import tempfile
 from pathlib import Path
+from termcolor import colored
 import functools
 import re
 from typing import ClassVar, Optional, Callable, Iterator
@@ -48,7 +49,7 @@ def nonbdna_register(mode):
             accession_name = extract_name(accession)
 
             # accession_tmp_dir = self.tempdir.joinpath(accession_name)
-            accession_tmp_dir = tempfile.TemporaryDirectory(prefix=mode)
+            accession_tmp_dir = tempfile.TemporaryDirectory(prefix=f"{accession_name}.{mode}.")
             accession_tmp_dir_path = self.tempdir.joinpath(accession_tmp_dir.name)
 
             # if accession_tmp_dir.is_dir():
@@ -68,18 +69,21 @@ def nonbdna_register(mode):
             if accession.name.endswith(".gz"):
 
                 # gzip compression strategy
-                with tempfile.NamedTemporaryFile(dir=accession_tmp_dir_path, delete=False, suffix='.fna') as unzipped_tmp:
+                with tempfile.NamedTemporaryFile(
+                                                 dir=accession_tmp_dir_path, 
+                                                 delete=False, 
+                                                 suffix='.fna') as unzipped_tmp:
 
                     with gzip.open(accession, 'rb') as handler:
                         unzipped_tmp.write(handler.read())
 
-                    accession = unzipped_tmp.name
+                    accession = Path(unzipped_tmp.name).name
             
             elif accession.name.endswith(".lz"):
 
                 # different compression strategy
                 raise NotImplementedYet()
-
+        
             os.chdir(accession_tmp_dir_path)
             out_tsv = accession_tmp_dir_path.joinpath(accession_name + f'_{mode}.tsv')
             out_gff = accession_tmp_dir_path.joinpath(accession_name + f'_{mode}.gff')
@@ -116,11 +120,8 @@ def nonbdna_register(mode):
             # remove redundant files
             os.unlink(out_gff)
 
-            # os.chdir('..')
-            # shutil.rmtree(accession_tmp_dir)
             os.chdir(cur_dir)
 
-            # os.unlink(accession)
             self.fn = self.tempdir.joinpath(accession_name + f'_{mode}.tsv')
             result = func(self, *args, **kwargs)
 
@@ -343,7 +344,6 @@ class MindiHunter:
         return self
 
 
-
     def process_table(self, min_arm_length: Optional[int] = None, 
                             max_spacer_length: Optional[int] = None, 
                             ) -> "MindiHunter":
@@ -351,7 +351,7 @@ class MindiHunter:
         
         tmp_file = tempfile.NamedTemporaryFile(
                                                dir=self.tempdir, 
-                                               prefix=str(self.fn),
+                                               prefix=str(self.fn) + ".",
                                                suffix=".tsv", 
                                                delete=False, 
                                                mode="w"
@@ -389,6 +389,7 @@ class MindiHunter:
                     if sequence_length < total_coordinate_length:
                         sequence = sequence[:sequence_length]
                         end = end - (total_coordinate_length - sequence_length)
+                        print(colored(f'Invalid sequence length detected for {self.fn} on (start,end)=({start},{end}) with sequence {sequence}.', 'red'))
 
                     # find sequence of arm
                     repeat = int(row['Repeat'])
