@@ -47,9 +47,10 @@ def nonbdna_register(mode):
                 raise FileNotFoundError(f'Unable to detect accession {accession}.')
 
             accession_name = extract_name(accession)
+            accession_id = extract_id(accession)
 
             # accession_tmp_dir = self.tempdir.joinpath(accession_name)
-            accession_tmp_dir = tempfile.TemporaryDirectory(prefix=f"{accession_name}.{mode}.")
+            accession_tmp_dir = tempfile.TemporaryDirectory(prefix=f"{accession_id}.{mode}.")
             accession_tmp_dir_path = self.tempdir.joinpath(accession_tmp_dir.name)
 
             # if accession_tmp_dir.is_dir():
@@ -87,13 +88,13 @@ def nonbdna_register(mode):
             os.chdir(accession_tmp_dir_path)
             out_tsv = accession_tmp_dir_path.joinpath(accession_name + f'_{mode}.tsv')
             out_gff = accession_tmp_dir_path.joinpath(accession_name + f'_{mode}.gff')
-            # rand_accession_name = str(uuid.uuid4())
-
+            rand_accession_name = str(uuid.uuid4())
+            
             match mode:
                 case 'IR':
-                    command = f"{self.nonBDNA} -seq {accession} -out {accession_name} -minIRrep {minrep} -skipAPR -skipSTR -skipMR -skipDR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
+                    command = f"{self.nonBDNA} -seq {accession} -out {rand_accession_name} -minIRrep {minrep} -skipAPR -skipSTR -skipMR -skipDR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
                 case 'MR':
-                    command = f"{self.nonBDNA} -seq {accession} -out {accession_name} -minMRrep {minrep} -skipAPR -skipSTR -skipIR -skipDR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
+                    command = f"{self.nonBDNA} -seq {accession} -out {rand_accession_name} -minMRrep {minrep} -skipAPR -skipSTR -skipIR -skipDR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
                 case 'DR':
                     raise NotImplementedYet('Direct Repeats Finder is not currently supported by this version of Mindi.')
                 case 'STR':
@@ -101,6 +102,7 @@ def nonbdna_register(mode):
                 case _:
                     raise ValueError(f'Unknown mode {mode}.')
             
+
             _ = subprocess.run(command, shell=True, 
                                         check=True,
                                         stdout=subprocess.DEVNULL,
@@ -108,8 +110,12 @@ def nonbdna_register(mode):
                                 )
 
             # check operation was succesful
-            if not Path(out_tsv).is_file():
+            if not Path(rand_accession_name + f"_{mode}.tsv").is_file():
                 raise FileNotFoundError(f"Failed to extract {mode} for {accession}.")
+
+            shutil.move(rand_accession_name + f"_{mode}.tsv", accession_name + f"_{mode}.tsv")
+            shutil.move(rand_accession_name + f"_{mode}.gff", accession_name + f"_{mode}.gff")
+
 
             destination = self.tempdir.joinpath(accession_name + f'_{mode}.tsv')
             if destination.is_file():
