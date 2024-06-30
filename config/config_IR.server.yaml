@@ -1,5 +1,6 @@
 buckets: 50
-out: 'irp_out'
+mode: 'IR'
+out: 'repeat_out'
 # files: 'filtered_assemblies_2024_3_22.txt'
 files: 'filtered_assemblies_eukaryota.txt'
 minrep: 8

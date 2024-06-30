@@ -95,8 +95,6 @@ rule extractCoverage:
                             ("CDS", None),
             ]
         extractions = {extract_id(file): file for file in params.extraction_parent.glob("*.csv")}
-        print(extractions)
-
         accessions = load_bucket(wildcards.bucket)
         util_cols = ["seqID", "start", "end"]
 

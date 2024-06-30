@@ -1,4 +1,4 @@
-from mindi import MindiHunter
+from mindi import MindiTool
 from termcolor import colored
 import json
 import numpy as np
@@ -7,6 +7,21 @@ from utils import parse_fasta
 
 buckets = config['buckets']
 out = config['out']
+mode = config['mode']
+
+if mode not in {'IR', 'MR', 'DR'}:
+    raise ValueError(f'Invalid mode {mode}.')
+
+if mode == 'IR':
+    extraction_type = 'Inverted Repeats'
+    db_name = 'inverted_repeats'
+elif mode == 'DR':
+    extraction_type = 'Direct Repeats'
+    db_name = 'direct_repeats'
+elif mode == 'MR':
+    extraction_type = 'Mirror Repeats'
+    db_name = 'mirror_repeats'
+
 
 def load_bucket(bucket):
     global buckets
@@ -22,7 +37,7 @@ def extract_name(accession):
 
 rule all:
     input:
-        "%s/irp_completed/inverted_repeats_db.parquet.snappy" % out
+        "%s/%s_completed/%s_db.parquet.snappy" % (out, mode, db_name)
 
 rule schedule:
     output:
@@ -50,41 +65,69 @@ rule schedule:
             json.dump(splitted_batches, f, indent=4)
 
 
-rule extractInvertedRepeats:
+rule extractRepeats:
     input:
         '%s/schedule_%s.json' % (out, config["buckets"])
     output:
-        touch("%s/irp_completed/bucket_{bucket}.completed" % out)
+        touch("%s/%s_completed/bucket_{bucket}.%s.completed" % (out, mode, mode))
     params:
         out=Path(config['out']).resolve(),
         minrep=int(config['minrep']),
         max_spacer_length=int(config['max_spacer_length']),
         min_arm_length=int(config['min_arm_length']),
     run:
-        Path(f"{params.out}/irp_completed").mkdir(exist_ok=True, parents=True)
+        Path(f"{params.out}/{mode}_completed").mkdir(exist_ok=True, parents=True)
         bucket = load_bucket(wildcards.bucket)
 
-        tempdir = Path(params.out).joinpath("irp_temp")
-        mindi = MindiHunter(tempdir=tempdir)
+        tempdir = Path(params.out).joinpath(f"{mode}_temp")
+        mindi = MindiTool(tempdir=tempdir)
 
-        destination_dir = params.out.joinpath("extracted_accessions")
+        destination_dir = params.out.joinpath(f"{mode}_extracted_accessions")
         destination_dir.mkdir(exist_ok=True)
+
+        def _extract_right_hand(left_arm, mode):
+            if mode == 'IR':
+                return ''.join({
+                                'a': 't', 
+                                't': 'a', 
+                                'g': 'c', 
+                                'c': 'g'
+                                }[n] for n in left_arm)[::-1]
+            elif mode == 'DR':
+                return left_arm
+            elif mode == 'MR':
+                return left_arm[::-1]
+
 
         for accession in bucket:
             print(f'Processing accession {accession}.')
             accession_id = extract_name(accession)
-            destination = destination_dir.joinpath(accession_id + ".IR.csv")
+            destination = destination_dir.joinpath(accession_id + f".{mode}.csv")
 
-            _ = mindi.extract_inverted(
+            if mode == 'IR':
+                _ = mindi.extract_inverted(
                           accession, 
                           minrep=params.minrep,
                           min_arm_length=params.min_arm_length,
                           max_spacer_length=params.max_spacer_length
                     )
-
-            # .to_dataframe()
+            elif mode == 'MR':
+                _ = mindi.extract_mirror(
+                        accession,
+                        minrep=params.minrep,
+                        min_arm_length=params.min_arm_length,
+                        max_spacer_length=params.max_spacer_length
+                        )
+            elif mode == 'DR':
+                raise NotImplementedYet('Direct Repeats extraction is not currently supported')
+            
 
             irp_df = mindi.to_dataframe()
+            
+            accession_id_extracted = extract_id(mindi.fnp)
+            accession_id = extract_id(accession)
+            assert accession_id_extracted == accession_id
+
             total_chr = 0
             for seqID, sequence in parse_fasta(accession):
 
@@ -113,38 +156,29 @@ rule extractInvertedRepeats:
 
                     section = sequence[start: end]
                     
-                    assert section == derived_seq == arm_seq + spacer_seq + ''.join({'a': 't', 'g': 'c', 'c': 'g', 't': 'a'}[n] for n in arm_seq)[::-1], f"{accession} on {seqID} - start-end: {start}-{end}."
+                    right_hand_side = _extract_right_hand(arm_seq, mode)
+                    assert section == derived_seq == arm_seq + spacer_seq + right_hand_side, f"{accession} on {seqID} - start-end: {start}-{end}."
                     assert arm_len * 2 + spacer_len == len(section) == len(derived_seq) == arm_true_len * 2 + spacer_true_len == seq_true_len, f"{accession} on {seqID} - start-end: {start}-{end}."
 
                     total_validated += 1
 
                 assert total_validated == total
-
+            print(colored(f'Accession {accession} has passed all checks.', 'green'))
             assert total_chr == 1
-
-
-
-
-
-            # irp_df.to_csv(
-            #              destination,
-            #              sep="\t",
-            #              index=False
-            #        )
 
             print(f'Accession {accession} has been processed succesfully.')
             mindi.moveto(destination)
 
-rule reduceInvertedRepeats:
+rule reduceRepeats:
     input:
-        expand("%s/irp_completed/bucket_{bucket}.completed" % out, bucket=range(buckets))
+        expand("%s/%s_completed/bucket_{bucket}.%s.completed" % (out, mode, mode), bucket=range(buckets))
     output:
-        "%s/irp_completed/inverted_repeats_db.parquet.snappy" % out
+        "%s/%s_completed/%s_db.parquet.snappy" % (out, mode, db_name)
     params:
         out=Path(config["out"]).resolve(),
         buckets=config["buckets"]
     run:
-        files = [extracted_file for extracted_file in params.out.joinpath("extracted_accessions").glob("*.IR.csv")]
+        files = [extracted_file for extracted_file in params.out.joinpath(f"{mode}_extracted_accessions").glob(f"*.{mode}.csv")]
         df_all = []
         for file in files:
             df = pd.read_table(file)

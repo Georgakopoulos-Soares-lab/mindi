@@ -1,4 +1,11 @@
-# Non B-DNA extractor
+# Mindi: A Non B-DNA extractor tool for data analysis
+
+__author__ = "Nikol Chantzi"
+__version__ = "1.0.1"
+__email__ = "nmc6088@psu.edu"
+
+
+### > IMPORTS BEGIN
 
 import subprocess
 import pandas as pd
@@ -11,12 +18,16 @@ import re
 from typing import ClassVar, Optional, Callable, Iterator
 from dotenv import load_dotenv
 from tailhunter import hunt_tail
+import fcntl
 import os
 import gzip
 from utils import parse_fasta
 from dataclasses import dataclass
 import shutil
 import uuid
+
+### < IMPORTS END
+
 
 @dataclass
 class Defaults:
@@ -80,11 +91,11 @@ def nonbdna_register(mode):
 
                     accession = Path(unzipped_tmp.name).name
             
-            elif accession.name.endswith(".lz"):
+            elif accession.name.endswith(".xz"):
 
                 # different compression strategy
                 raise NotImplementedYet()
-        
+
             os.chdir(accession_tmp_dir_path)
             out_tsv = accession_tmp_dir_path.joinpath(accession_name + f'_{mode}.tsv')
             out_gff = accession_tmp_dir_path.joinpath(accession_name + f'_{mode}.gff')
@@ -116,7 +127,6 @@ def nonbdna_register(mode):
             shutil.move(rand_accession_name + f"_{mode}.tsv", accession_name + f"_{mode}.tsv")
             shutil.move(rand_accession_name + f"_{mode}.gff", accession_name + f"_{mode}.gff")
 
-
             destination = self.tempdir.joinpath(accession_name + f'_{mode}.tsv')
             if destination.is_file():
                 os.remove(destination)
@@ -125,7 +135,6 @@ def nonbdna_register(mode):
 
             # remove redundant files
             os.unlink(out_gff)
-
             os.chdir(cur_dir)
 
             self.fn = self.tempdir.joinpath(accession_name + f'_{mode}.tsv')
@@ -138,7 +147,7 @@ def nonbdna_register(mode):
     return nonbdna
 
 
-class MindiHunter:
+class MindiTool:
     
     MINDI_FIELDS: ClassVar[list[str]] = [
                                          "seqID", 
@@ -167,6 +176,17 @@ class MindiHunter:
                     "stackerLength",
                     "spacerLength",
                     ]
+
+    TAIL_FIELDS: ClassVar[list[str]] = [
+                            "seqID", 
+                            "start", 
+                            "end", 
+                            "sequence", 
+                            "length", 
+                            "consensus", 
+                            "sru", 
+                            "consensus_repeats"
+                            ]
 
     FRAME_FIELDS: ClassVar[list[str]] = [
                              "seqID", 
@@ -222,7 +242,7 @@ class MindiHunter:
     
     def to_dataframe(self, usecols: bool = True) -> pd.DataFrame:
         # STILL EXPERIMENTAL
-        if self.cur_mode == 'RE':
+        if self.cur_mode == 'RE' or self.cur_mode == "TAIL":
             tmp_file = self.fn
         else:
             tmp_file = self.fnp
@@ -247,7 +267,7 @@ class MindiHunter:
                         minrep: int = 8, 
                         min_arm_length: Optional[int] = None, 
                         max_spacer_length: Optional[int] = None,
-               ) -> "MindiHunter":
+               ) -> "MindiTool":
 
        mindi_table = self.process_table(
                     min_arm_length=min_arm_length, 
@@ -259,10 +279,10 @@ class MindiHunter:
     @nonbdna_register(mode='MR') 
     def extract_mirror(self,    accession: os.PathLike[str], 
                                 minrep: int = 8, 
-                                arm_length: Optional[int] = None, 
-                                spacer_length: Optional[int] = None,
-                            ) -> "MindiHunter":
-        mindi_table = self.process_table(min_arm_length=arm_length, max_spacer_length=spacer_length)
+                                min_arm_length: Optional[int] = None, 
+                                max_spacer_length: Optional[int] = None,
+                            ) -> "MindiTool":
+        mindi_table = self.process_table(min_arm_length=min_arm_length, max_spacer_length=max_spacer_length)
         self.cur_mode = 'MR'
         return self
 
@@ -283,7 +303,7 @@ class MindiHunter:
     def extract_regex(self, accession: os.PathLike[str], 
                             stacker: str = "g", 
                             minrep: int = 3,
-                            multiplicity: int = 3) -> "MindiHunter":
+                            multiplicity: int = 3) -> "MindiTool":
 
         self.cur_mode = "RE"
         regex = RegexExtractor(stacker=stacker, 
@@ -291,12 +311,12 @@ class MindiHunter:
                                multiplicity=multiplicity)
 
 
-        # global extract_name
+        # global extract_name--cluster-config config/cluster_overlap.yaml --cores $j
         # accession_name = extract_name(accession)
         # accession_tmp_dir = self.tempdir.joinpath(accession_name)
 
         with tempfile.NamedTemporaryFile(dir=self.tempdir, delete=False, suffix=".re", mode="w") as file:
-            dict_writer = csv.DictWriter(file, delimiter="\t", fieldnames=MindiHunter.REGEX_FIELDS)
+            dict_writer = csv.DictWriter(file, delimiter="\t", fieldnames=MindiTool.REGEX_FIELDS)
             dict_writer.writeheader()
 
             for table in regex.parse_regex(accession):
@@ -323,41 +343,58 @@ class MindiHunter:
         mindi_table = pd.read_table(self.fnp)
         return mindi_table
 
+
+    def extract_tails(self, accession: os.PathLike[str], minrepeat: int = 8) -> "MindiTool":
+        self.cur_mode = "TAIL"
+        with tempfile.NamedTemporaryFile(dir=self.tempdir, 
+                                         delete=False, 
+                                         suffix=".tail", 
+                                         mode="w") as file:
+            dict_writer = csv.DictWriter(
+                                         file, 
+                                         delimiter="\t", 
+                                         fieldnames=MindiTool.TAIL_FIELDS
+                                         )
+            dict_writer.writeheader()
+            for seqID, sequence in parse_fasta(accession):
+                for mononucleotide_tail in hunt_tail(sequence=sequence, 
+                                                     minrepeat=minrepeat,
+                                                     seqID=seqID
+                                                     ):
+                    dict_writer.writerow(mononucleotide_tail)
+
+            self.fn = file.name
+        return self
+
+
     @nonbdna_register(mode='STR')
     def extract_tandem(self, accession: os.PathLike[str], 
-                             min_sru: Optional[int] = None) -> "MindiHunter":
+                             min_sru: Optional[int] = None) -> "MindiTool":
         raise NotImplementedYet()
         self._process_RTRF()
 
-    def _process_RTRF(self) -> "MindiHunter":
+
+    def _process_RTRF(self) -> "MindiTool":
         raise NotImplementedYet()
+
 
     @nonbdna_register(mode='DR')
     def extract_direct(self, accession: os.PathLike[str], 
                     minrep: int = 8,
                     min_arm_length: Optional[int] = None,
                     max_spacer_length: Optional[int] = None
-                ) -> "MindiHunter":
+                ) -> "MindiTool":
         raise NotImplementedYet()
-
-    def extract_tails(self, accession: os.PathLike[str], minrep: int) -> "MindiHunter":
-        for seqID, sequence in parse_fasta(accession):
-            mononucleotide_repeats = hunt_tail(sequence=sequence, minrepeat=minrep)
-
-            for repeat in mononucleotide_repeats:
-                print(repeat)
-
-        return self
 
 
     def process_table(self, min_arm_length: Optional[int] = None, 
                             max_spacer_length: Optional[int] = None, 
-                            ) -> "MindiHunter":
+                            ) -> "MindiTool":
         to_drop = ["Source", "Type", "Score", "Strand", "Subset", "Permutations", "Sequence", "Start", "Stop"]
         
         tmp_file = tempfile.NamedTemporaryFile(
                                                dir=self.tempdir, 
-                                               prefix=str(self.fn) + ".",
+                                               prefix=str(self.fn).replace(".tsv", "") + ".",
                                                suffix=".tsv", 
                                                delete=False, 
                                                mode="w"
@@ -369,7 +406,7 @@ class MindiHunter:
             fout_writer = csv.DictWriter(
                                          fout, 
                                          delimiter="\t", 
-                                         fieldnames=MindiHunter.FRAME_FIELDS
+                                         fieldnames=MindiTool.FRAME_FIELDS
                                          )
 
             fout_writer.writeheader()
@@ -396,6 +433,8 @@ class MindiHunter:
                         sequence = sequence[:sequence_length]
                         end = end - (total_coordinate_length - sequence_length)
                         print(colored(f'Invalid sequence length detected for {self.fn} on (start,end)=({start},{end}) with sequence {sequence}.', 'red'))
+                        raise ValueError(f'Invalid sequence length detected for {self.fn}.')
+
 
                     # find sequence of arm
                     repeat = int(row['Repeat'])
@@ -536,3 +575,5 @@ class RegexExtractor:
                                reverse=False
                                )
                 yield table
+
+

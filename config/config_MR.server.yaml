@@ -1,0 +1,8 @@
+buckets: 50
+mode: 'MR'
+out: 'repeat_out'
+# files: 'filtered_assemblies_2024_3_22.txt'
+files: 'filtered_assemblies_eukaryota.txt'
+minrep: 8
+max_spacer_length: 8
+min_arm_length: 10

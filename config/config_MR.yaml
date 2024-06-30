@@ -1,5 +1,6 @@
 buckets: 2
-out: 'irp_out'
+mode: 'MR'
+out: 'repeat_out'
 files: 'filtered_assemblies.txt'
 minrep: 8
 max_spacer_length: 8

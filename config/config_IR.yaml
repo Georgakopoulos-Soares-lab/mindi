@@ -1,15 +1,8 @@
 buckets: 2
-out: 'bed_outl'
 mode: 'IR'
-compartment: 'gene'
-ext_suffix: 'csv'
-suffix: 'csv'
-window_size: 500
-gff_parent: 'transfer/gff'
-admissible: 'transfer/IR'
-schedule: 'filtered_assemblies.txt'
-summary: 'assembly_summary_g4.txt.gz'
-extractions: 'transfer/IR'
-same_strand: 0
-gff_suffix: 'gff.gz'
+out: 'repeat_out'
+files: 'filtered_assemblies.txt'
+minrep: 8
+max_spacer_length: 8
+min_arm_length: 10
 

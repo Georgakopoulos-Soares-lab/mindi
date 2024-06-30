@@ -1,6 +1,6 @@
 from typing import Optional
 
-def hunt_tail(sequence: str, minrepeat: int, chromosome: Optional[str] = None) -> list[dict]:
+def hunt_tail(sequence: str, minrepeat: int, seqID: Optional[str] = None) -> list[dict]:
     start = 1
     consensus = sequence[0]
     rows = []
@@ -13,21 +13,27 @@ def hunt_tail(sequence: str, minrepeat: int, chromosome: Optional[str] = None) -
         else:
             if total_length >= minrepeat:
                 end = i
-                tandem = sequence[start-1: end]
-                rows.append([start,
-                             end,
-                             end - start + 1,
-                             consensus,
-                             tandem,
-                             len(consensus),
-                             tandem.count(consensus)
-                             ]
-                    )
+                tandem_sequence = sequence[start-1: end]
+                send_dict = dict()
+
+                if seqID:
+                    send_dict.update({"seqID": seqID})
+
+                send_dict.update({
+                      "start": start,
+                      "end": end,
+                      "sequence": tandem_sequence,
+                      "length": end - start + 1,
+                      "consensus": consensus,
+                      "sru": len(consensus),
+                      "consensus_repeats": tandem.count(consensus),
+                    })
+
+                yield send_dict
 
             consensus = nucleotide
             total_length = 1
             start = i+1
-    return rows
 
 
 if __name__ == "__main__":
@@ -44,6 +50,7 @@ if __name__ == "__main__":
     sequence = args.sequence 
 
 
-    tandem_tail = hunt_tail(sequence=sequence, minrepeat=minrepeat)
+    for tandem_tail in hunt_tail(sequence=sequence, minrepeat=minrepeat):
+        print(tandem_tail)
     breakpoint()
 
