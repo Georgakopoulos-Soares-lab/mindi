@@ -25,6 +25,10 @@ from utils import parse_fasta
 from dataclasses import dataclass
 import shutil
 import uuid
+import sys
+
+
+csv.field_size_limit(sys.maxsize)
 
 ### < IMPORTS END
 
