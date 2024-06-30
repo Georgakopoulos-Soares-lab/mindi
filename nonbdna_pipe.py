@@ -26,6 +26,8 @@ elif mode == 'MR':
 def load_bucket(bucket):
     global buckets
     global out
+
+    print(f"Reading schedule data from '{out}/schedule_{buckets}.json'...")
     with open(f"{out}/schedule_{buckets}.json", mode="r", encoding="UTF-8") as f:
         return json.load(f)[str(bucket)]
 
@@ -43,6 +45,7 @@ rule schedule:
     output:
         "%s/schedule_%s.json" % (out, config["buckets"])
     params:
+        out=Path(config["out"]).resolve(),
         buckets=config["buckets"],
         files=config["files"],
     run:
@@ -58,6 +61,11 @@ rule schedule:
 
         total_split = params.buckets
         splitted_batches = {batch_id: job.tolist() for batch_id, job in enumerate(np.array_split(assemblies, total_split))}
+
+        # PREPARE DESTINATION DIRECTORIES
+        Path(f"{params.out}/{mode}_completed").mkdir(exist_ok=True, parents=True)
+        destination_dir = params.out.joinpath(f"{mode}_extracted_accessions")
+        destination_dir.mkdir(exist_ok=True)
         
         
         Path(out).mkdir(exist_ok=True)
@@ -76,16 +84,15 @@ rule extractRepeats:
         max_spacer_length=int(config['max_spacer_length']),
         min_arm_length=int(config['min_arm_length']),
     run:
-        Path(f"{params.out}/{mode}_completed").mkdir(exist_ok=True, parents=True)
         bucket = load_bucket(wildcards.bucket)
 
         tempdir = Path(params.out).joinpath(f"{mode}_temp")
+        destination_dir = params.out.joinpath(f"{mode}_extracted_accessions")
+
         mindi = MindiTool(tempdir=tempdir)
 
-        destination_dir = params.out.joinpath(f"{mode}_extracted_accessions")
-        destination_dir.mkdir(exist_ok=True)
 
-        def _extract_right_hand(left_arm, mode):
+        def _extract_right_hand(left_arm: str, mode: str) -> str:
             if mode == 'IR':
                 return ''.join({
                                 'a': 't', 
@@ -122,7 +129,7 @@ rule extractRepeats:
                 raise NotImplementedYet('Direct Repeats extraction is not currently supported')
             
 
-            irp_df = mindi.to_dataframe()
+            repeat_df = mindi.to_dataframe()
             
             accession_id_extracted = extract_id(mindi.fnp)
             accession_id = extract_id(accession)
@@ -131,7 +138,7 @@ rule extractRepeats:
             total_chr = 0
             for seqID, sequence in parse_fasta(accession):
 
-                temp = irp_df[irp_df['seqID'] == seqID]
+                temp = repeat_df[repeat_df['seqID'] == seqID]
                 total_chr = 1
 
                 total = temp.shape[0]

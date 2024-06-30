@@ -18,7 +18,6 @@ import re
 from typing import ClassVar, Optional, Callable, Iterator
 from dotenv import load_dotenv
 from tailhunter import hunt_tail
-import fcntl
 import os
 import gzip
 from utils import parse_fasta
