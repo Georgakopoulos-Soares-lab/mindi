@@ -61,14 +61,8 @@ rule schedule:
 
         total_split = params.buckets
         splitted_batches = {batch_id: job.tolist() for batch_id, job in enumerate(np.array_split(assemblies, total_split))}
+        Path(params.out).mkdir(exist_ok=True)
 
-        # PREPARE DESTINATION DIRECTORIES
-        Path(f"{params.out}/{mode}_completed").mkdir(exist_ok=True, parents=True)
-        destination_dir = params.out.joinpath(f"{mode}_extracted_accessions")
-        destination_dir.mkdir(exist_ok=True)
-        
-        
-        Path(out).mkdir(exist_ok=True)
         with open(output[0], mode="w", encoding="UTF-8") as f:
             json.dump(splitted_batches, f, indent=4)
 
@@ -84,6 +78,13 @@ rule extractRepeats:
         max_spacer_length=int(config['max_spacer_length']),
         min_arm_length=int(config['min_arm_length']),
     run:
+        # PREPARE DESTINATION DIRECTORIES
+        Path(f"{params.out}/{mode}_completed").mkdir(exist_ok=True, parents=True)
+        destination_dir = params.out.joinpath(f"{mode}_extracted_accessions")
+        destination_dir.mkdir(exist_ok=True)
+
+        
+        
         bucket = load_bucket(wildcards.bucket)
 
         tempdir = Path(params.out).joinpath(f"{mode}_temp")

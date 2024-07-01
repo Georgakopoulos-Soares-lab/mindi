@@ -1,5 +1,11 @@
 # Keep your GFF Clean & Tidy
 
+__author__ = "Nikol Chantzi"
+__email__ = "nmc6088@psu.edu"
+__version__ = "1.0.1"
+
+### > IMPORTS BEGIN 
+
 import gzip
 import os
 import tempfile
@@ -11,6 +17,8 @@ import subprocess
 from typing import Optional, ClassVar
 import pandas as pd
 
+
+### < IMPORTS END
 
 class GFFCleaner:
     
@@ -90,7 +98,6 @@ class GFFCleaner:
 
 
     def read(self, gff: os.PathLike[str], add_exons: bool = True, reduce_biotype: bool = True) -> pd.DataFrame:
-        # ΘΕΛΕΙ PERL ΕΔΩ!
         gff = Path(gff).resolve()
         gff_name = gff.name.split('.gff')[0]
 
@@ -108,9 +115,7 @@ class GFFCleaner:
 
         if add_exons:
             with tempfile.NamedTemporaryFile(prefix=gff_name + ".agat", dir=self.tempdir, delete=True) as tmp:
-                tmp_name = tmp.name
-                os.remove(tmp_name)
-                command = f"agat_convert_sp_gxf2gxf.pl -g {gff} -o {tmp_name}"
+                command = f"agat_convert_sp_gxf2gxf.pl -g {gff} -o {tmp.name}"
                 subprocess.run(
                            command, 
                            check=True, 
@@ -118,7 +123,6 @@ class GFFCleaner:
                            stderr=subprocess.DEVNULL, 
                            stdout=subprocess.DEVNULL
                         )
-                gff = tmp_name
 
                 gff_df = pd.read_table(
                             tmp.name,
@@ -195,7 +199,16 @@ class GFFCleaner:
             merged_gff.loc[:, "compartment"] = merged_gff["compartment"].astype(str)
 
         else: 
-            merged_gff = pd.DataFrame([], columns=["seqID", "start", "end", "overlapCount", "compartment", "biotype"])
+            merged_gff = pd.DataFrame([], 
+                                      columns=[
+                                            "seqID", 
+                                            "start", 
+                                            "end", 
+                                            "overlapCount", 
+                                            "compartment", 
+                                            "biotype"
+                                            ]
+                                      )
 
         return merged_gff
 
@@ -210,7 +223,6 @@ if __name__ == "__main__":
     parser.add_argument("--bedtools_path", type=str, default="/storage/group/izg5139/default/nicole/miniconda3/bin")
     parser.add_argument("--tempdir", type=str, default="gff_clean_tmp")
 
-    # bedtools_path = "/home/dollzeta/frogtools/bedtools2/bin"
     # bedtools_path = "/storage/group/izg5139/default/nicole/miniconda3/bin"
 
     args = parser.parse_args()
@@ -218,6 +230,8 @@ if __name__ == "__main__":
     add_exons = args.add_exons
     bedtools_path = args.bedtools_path
     tempdir_path = args.tempdir
+
+    bedtools_path = "/home/dollzeta/frogtools/bedtools2/bin"
 
     cleaner = GFFCleaner(bedtools_path=bedtools_path, tempdir=tempdir_path)
     gff_df = cleaner.read(gff, add_exons=add_exons)

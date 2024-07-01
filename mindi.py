@@ -19,6 +19,7 @@ from typing import ClassVar, Optional, Callable, Iterator
 from dotenv import load_dotenv
 from tailhunter import hunt_tail
 import os
+import stat
 import gzip
 from utils import parse_fasta
 from dataclasses import dataclass
@@ -100,6 +101,7 @@ def nonbdna_register(mode):
                 raise NotImplementedYet()
 
             os.chdir(accession_tmp_dir_path)
+
             out_tsv = accession_tmp_dir_path.joinpath(accession_name + f'_{mode}.tsv')
             out_gff = accession_tmp_dir_path.joinpath(accession_name + f'_{mode}.gff')
             rand_accession_name = str(uuid.uuid4())

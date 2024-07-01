@@ -84,6 +84,7 @@ rule extractCoverage:
         bedtools_path=config['bedtools_path'],
         split_category=config['split_category'],
         split_collection=config['split_collection'],
+        mode=config["mode"],
     run:
         extract_id = lambda accession: '_'.join(Path(accession).name.split("_")[:2])
         all_compartments = [
@@ -94,7 +95,12 @@ rule extractCoverage:
                             ("exon", None),
                             ("CDS", None),
             ]
-        extractions = {extract_id(file): file for file in params.extraction_parent.glob("*.csv")}
+
+        path_to_glob = params.extraction_parent.joinpath(f'{params.mode}_extracted_accessions')
+        print(path_to_glob)
+        extractions = {extract_id(file): file for file in path_to_glob.glob("*.csv")}
+
+        print(extractions)
         accessions = load_bucket(wildcards.bucket)
         util_cols = ["seqID", "start", "end"]
 
@@ -179,7 +185,6 @@ rule extractCoverage:
                 coverage_df.loc[:, "#assembly_accession"] = extract_id(accession)
                 round_cols = ["averageCoverage", "medianCoverage", "minCoverage", "maxCoverage", "totalCoverage", "overlapping"]
                 coverage_df[round_cols] = coverage_df[round_cols].round(3)
-                coverage_df.set_index("#assembly_accession", inplace=True)
                 coverage_table.append(coverage_df)
         
 
@@ -206,6 +211,7 @@ rule extractCoverage:
         else:
             coverage_table = pd.DataFrame([], columns=coverage_columns)
 
+        coverage_table.set_index("#assembly_accession", inplace=True)
         coverage_table.to_csv(output[0], sep="\t", index=True, mode="w")
 
 
