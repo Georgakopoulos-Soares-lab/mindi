@@ -26,9 +26,9 @@ else
   elif [[ $mode == "tandem" ]]; then
     snakemake --snakefile nonbdna_pipe.py --configfile config/config_STR.server.yaml -j $j --latency-wait 45 --cluster-config config/cluster_overlap.yaml --cluster "sbatch -p {cluster.partition} -t {cluster.time} --mem={cluster.mem} -c {cluster.ncpus} --nodes={cluster.nodes} -o jobOut/{cluster.jobName}-%j.out -J {cluster.jobName} -e jobOut/{cluster.jobName}-%j.err"
   elif [[ $mode == "IR" ]]; then
-    snakemake --snakefile nonbdna_pipe.py --configfile config/config_IR.server.yaml -j $j --latency-wait 45 --cluster-config config/cluster_overlap.yaml --cluster "sbatch -p {cluster.partition} -t  {cluster.time} --mem={cluster.mem} --account={cluster.account} -c {cluster.ncpus} --nodes={cluster.nodes} -o jobOut/{cluster.jobName}-IR-%j.out -J {cluster.jobName} -e jobOut/{cluster.jobName}-IR-%j.err"
+    snakemake --snakefile nonbdna_pipe.py --keep-going --configfile config/config_IR.server.yaml -j $j --latency-wait 45 --cluster-config config/cluster_overlap.yaml --cluster "sbatch -p {cluster.partition} -t  {cluster.time} --mem={cluster.mem} --account={cluster.account} -c {cluster.ncpus} --nodes={cluster.nodes} -o jobOut/{cluster.jobName}-IR-%j.out -J {cluster.jobName} -e jobOut/{cluster.jobName}-IR-%j.err"
   elif [[ $mode == "MR" ]]; then
-    snakemake --snakefile nonbdna_pipe.py --configfile config/config_MR.server.yaml -j $j --latency-wait 5 --cluster-config config/cluster_overlap.yaml --cluster "sbatch -p {cluster.partition} -t  {cluster.time} --mem={cluster.mem} --account={cluster.account} -c {cluster.ncpus} --nodes={cluster.nodes} -o jobOut/{cluster.jobName}-MR-%j.out -J {cluster.jobName} -e jobOut/{cluster.jobName}-MR-%j.err"
+    snakemake --snakefile nonbdna_pipe.py --keep-going --configfile config/config_MR.server.yaml -j $j --latency-wait 5 --cluster-config config/cluster_overlap.yaml --cluster "sbatch -p {cluster.partition} -t  {cluster.time} --mem={cluster.mem} --account={cluster.account} -c {cluster.ncpus} --nodes={cluster.nodes} -o jobOut/{cluster.jobName}-MR-%j.out -J {cluster.jobName} -e jobOut/{cluster.jobName}-MR-%j.err"
   else
     echo "Request could not be fullfiled. Reason: Invalid mode $mode."
     exit 1

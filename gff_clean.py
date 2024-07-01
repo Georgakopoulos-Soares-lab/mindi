@@ -114,8 +114,12 @@ class GFFCleaner:
                 gff = tmp.name
 
         if add_exons:
-            with tempfile.NamedTemporaryFile(prefix=gff_name + ".agat", dir=self.tempdir, delete=True) as tmp:
+            with tempfile.NamedTemporaryFile(prefix=gff_name + ".agat.", dir=self.tempdir, delete=True) as tmp:
+                if Path(tmp.name).is_file():
+                    os.remove(tmp.name)
+
                 command = f"agat_convert_sp_gxf2gxf.pl -g {gff} -o {tmp.name}"
+                print("Running agat!")
                 subprocess.run(
                            command, 
                            check=True, 

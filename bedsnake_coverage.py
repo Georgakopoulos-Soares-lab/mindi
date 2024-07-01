@@ -1,16 +1,23 @@
 # Coverage PIPELINE
 
+
+### > IMPORTS BEGIN
+
 from pathlib import Path
 import subprocess
 from termcolor import colored
+import threading
 import os
 import tempfile
 import json
 import pybedtools
+from utils import ProgressTracker
 from pybedtools import BedTool
 import numpy as np
 from gff_clean import GFFCleaner
 import pandas as pd
+
+### > IMPORTS END
 
 out = Path(config['out']).resolve()
 out.mkdir(exist_ok=True)
@@ -100,7 +107,6 @@ rule extractCoverage:
         print(path_to_glob)
         extractions = {extract_id(file): file for file in path_to_glob.glob("*.csv")}
 
-        print(extractions)
         accessions = load_bucket(wildcards.bucket)
         util_cols = ["seqID", "start", "end"]
 
@@ -113,7 +119,18 @@ rule extractCoverage:
                              bedtools_path=params.bedtools_path
                             )
 
+        total_accessions = len(accessions)
+        tracker = ProgressTracker(
+                                 total_accessions=total_accessions,
+                                 filename=params.out.joinpath("biologs", f"biolog_tracker_{wildcards.bucket}.log"),
+                                 )
+
+        logging_thread = threading.Thread(target=tracker.track_progress, daemon=True)
+        logging_thread.start()
+
         for accession in accessions:
+
+            tracker.counter += 1
             print(colored(f"Processing accession '{accession}'.", "green"))
 
             accession = Path(accession)
@@ -132,7 +149,8 @@ rule extractCoverage:
                                     )
             
             # accession_name = extract_name(accession)
-            gff_df_merged = gff_cleaner.read(gff_file, add_exons=False)
+            gff_df_merged = gff_cleaner.read(gff_file, add_exons=True)
+            assert gff_df_merged.shape[0] > 0
 
             # Extractions = Overlapping <>
             # bedtoolsInteresect -> GroupBy -> Spacer Lengths + 'All'
@@ -146,7 +164,8 @@ rule extractCoverage:
                     temp = extract_df[extract_df[params.split_category] == split_value]
 
                 extract_df_temp = BedTool.from_dataframe(temp)
-                compartment_df = BedTool.from_dataframe(gff_df_merged[["seqID", 
+                compartment_df = BedTool.from_dataframe(gff_df_merged[[
+                                                                       "seqID", 
                                                                        "start", 
                                                                        "end", 
                                                                        "compartment", 
@@ -210,7 +229,8 @@ rule extractCoverage:
             coverage_table = coverage_table[coverage_columns]
         else:
             coverage_table = pd.DataFrame([], columns=coverage_columns)
-
+        
+        pybedtools.helpers.cleanup(remove_all=False)
         coverage_table.set_index("#assembly_accession", inplace=True)
         coverage_table.to_csv(output[0], sep="\t", index=True, mode="w")
 
