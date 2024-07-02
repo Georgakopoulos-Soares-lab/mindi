@@ -17,7 +17,11 @@ class Scheduler:
 
 class MiniBucketScheduler(Scheduler):
 
-    def schedule(self, files: list[os.PathLike[str]], total_buckets: int) -> dict[str, list[str]]:
+    def schedule(self, files: list[os.PathLike[str]], total_buckets: int, use_gff: int = 0) -> dict[str, list[str]]:
+
+        if use_gff:
+            files = [str(file).replace("fna", "gff") for file in files]
+
         scheduled_files = [[] for _ in range(total_buckets)]
         bucket_burden = [0 for _ in range(total_buckets)]
         
@@ -69,11 +73,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--accessions_path", type=str, default='filtered_assemblies.txt')
     parser.add_argument("--total_buckets", type=int, default=2)
+    parser.add_argument("--use_gff", type=int, default=0)
     
     
     args = parser.parse_args()
     accessions_path = Path(args.accessions_path).resolve()
     total_buckets = args.total_buckets
+    use_gff = args.use_gff
 
     accessions = []
     with open(accessions_path, mode="r") as f:
@@ -81,13 +87,19 @@ if __name__ == "__main__":
             line = line.strip()
 
             if line.count("\t") > 1:
+                has_gff = int(line.split("\t")[2])
                 line = line.split("\t")[0]
+            else:
+                has_gff = 1
 
-            accessions.append(line)
+
+            if has_gff:
+                accessions.append(line)
 
     scheduler = MiniBucketScheduler()
-    scheduled_files = scheduler.schedule(accessions, total_buckets=total_buckets)
+    scheduled_files = scheduler.schedule(accessions, total_buckets=total_buckets, use_gff=use_gff)
     
+
     destination = f"new_schedule_{total_buckets}.json"
     scheduler.saveas(scheduled_files, destination)
     print(f"New schedule has been saved at {destination}.")

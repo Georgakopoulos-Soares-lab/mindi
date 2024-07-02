@@ -7,13 +7,22 @@ import os
 from pathlib import Path
 
 def agatify(gff_files: list[os.PathLike[str]], destination: os.PathLike[str]) -> None:
-    extract_name = lambda accession: accession.split('.gff')[0]
+    extract_name = lambda accession: Path(accession).name.split('.gff')[0]
     total_gff_files = len(gff_files)
     destination = Path(destination).resolve()
     destination.mkdir(exist_ok=True)
+    
+    # remove potential duplicates
+    gff_files = list(set(gff_files))
 
+    # start processing
     for file in tqdm(gff_files, total=total_gff_files, leave=True, position=0):
+        file = Path(file).resolve()
         dest_name = extract_name(file) + ".agat.gff"
+        
+        destination_file = destination.joinpath(dest_name)
+        if destination_file.is_file():
+            raise ValueError(f"File {destination_file} already exists!")
 
         tempdir = tempfile.TemporaryDirectory(prefix=extract_name(file) + ".")
 
@@ -46,8 +55,12 @@ if __name__ == "__main__":
     destination = args.destination
     bucket_id = args.bucket_id
     schedule_path = args.schedule_path
-    
+
+    print(f"Retrieving schedule from path {schedule_path}...")
+    print(f"Processing bucket {bucket_id}...")
 
     gff_files = load_bucket(bucket_id, schedule_path)
     agatify(gff_files, destination=destination)
+
+    print(f"Bucket {bucket_id} has been processed succesfully.")
 

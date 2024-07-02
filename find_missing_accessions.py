@@ -29,7 +29,7 @@ if __name__ == "__main__":
 
     
     extractions_path = Path(extractions_path).resolve()
-    extracted_accessions = {extract_id(file) for file in extractions_path.glob("*.IR.csv")}
+    extracted_accessions = {extract_id(file) for file in extractions_path.glob("*.csv")}
     print(f"Total accessions detected: {len(accessions)}.")
     print(colored(f"Total extracted accessions detected: {len(extracted_accessions)}.", "green"))
     
@@ -41,12 +41,3 @@ if __name__ == "__main__":
                 total_remaining += 1
 
     print(colored(f"Total remaining accessions detected: {total_remaining}.", "red"))
-
-
-
-
-
-
-
-
-    

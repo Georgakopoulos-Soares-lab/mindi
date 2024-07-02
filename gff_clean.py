@@ -151,17 +151,22 @@ class GFFCleaner:
 
             os.chdir(cur_dir)
             reading_temp_dir.cleanup()
-            if gff_df.shape[0] == 0:
-
-                # read it again
-                gff_df = self.read_gff(gff)
-                compartments = gff_df['compartment'].unique()
-                if len(compartments) > 1:
-                    raise ValueError("Invalid gff compartments after AGAT filtering. Must contain at least 'region'. Accession: {gff}.")
-
 
         else:
             gff_df = self.read_gff(gff)
+
+
+        if gff_df.shape[0] == 0:
+
+            # read it again
+            gff_df = self.read_gff(gff)
+            compartments = gff_df['compartment'].unique()
+            if len(compartments) > 1:
+                raise ValueError("Invalid gff compartments after AGAT filtering. Must contain at least 'region'. Accession: {gff}.")
+
+            if gff_df.shape[0] == 0:
+                raise ValueError("Empty gff dataframe for accession {gff}.")
+
 
         gff_df.loc[:, "start"] = gff_df["start"] - 1
         gff_df.loc[:, "biotype"] = gff_df["attributes"].apply(GFFCleaner.parse_biotype)

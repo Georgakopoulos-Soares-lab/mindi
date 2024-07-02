@@ -143,7 +143,7 @@ rule extractCoverage:
             accession = Path(accession)
             accession_id = extract_id(accession)
 
-            gff_file = params.gff_parent.joinpath(accession.name.replace("fna", "gff"))
+            gff_file = params.gff_parent.joinpath(accession.name.split(".fna")[0] + "agat.gff")
             extraction_file = extractions[accession_id]
 
             if not gff_file.is_file():
@@ -156,7 +156,7 @@ rule extractCoverage:
                                     )
             
             # accession_name = extract_name(accession)
-            gff_df_merged = gff_cleaner.read(gff_file, add_exons=True)
+            gff_df_merged = gff_cleaner.read(gff_file, add_exons=False)
             assert gff_df_merged.shape[0] > 0
 
             # Extractions = Overlapping <>
