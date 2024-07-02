@@ -5,12 +5,15 @@ import os
 from pathlib import Path
 import threading
 import logging
+from typing import Optional
 
 class ProgressTracker:
 
-    def __init__(self, total_accessions: int, log_filename: str = "biologs/tracker.log") -> None:
-        self.log_filename = Path(log_filename).resolve()
+    def __init__(self, total_accessions: int, filename: str = "biologs/tracker.log", bucket_id: Optional[int] = None) -> None:
+        self.log_filename = Path(filename).resolve()
         self.log_filename.parent.mkdir(exist_ok=True)
+
+        self.bucket_id = bucket_id
 
         self.sleeping_time = 600 # seconds sleeping time
 
@@ -20,15 +23,17 @@ class ProgressTracker:
         logging.basicConfig(
                             filename=self.log_filename,
                             level=logging.INFO, 
-                            format="%(levelname)s:%(message)s"
+                            format="%(asctime)s:%(levelname)s:%(message)s",
+                            datefmt="%Y-%m-%d %H:%M:%S",
                         )
     
-    def _get_progress(self) -> float:
-        return self.counter * 1e2 / self.total_accessions
+    def _get_progress(self) -> str:
+        return f"{self.counter * 1e2 / self.total_accessions:.2f}"
 
     def track_progress(self) -> None:
+        bucket_info = f"Bucket: {self.bucket_id};" if self.bucket_id else ""
         while True:
-            logging.info(f"Progress level: {self._get_progress()}%.")
+            logging.info(f"{bucket_info}Progress level: {self._get_progress()}%.")
             time.sleep(self.sleeping_time)
 
 

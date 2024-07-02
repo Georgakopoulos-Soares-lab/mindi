@@ -116,13 +116,15 @@ rule extractCoverage:
 
         gff_cleaner = GFFCleaner(
                             tempdir=params.tempdir,
-                             bedtools_path=params.bedtools_path
-                            )
+                            bedtools_path=params.bedtools_path
+                        )
 
         total_accessions = len(accessions)
+        progress_tracking_log = params.out.joinpath("biologs", f"biolog_tracker_{wildcards.bucket}.log")
         tracker = ProgressTracker(
                                  total_accessions=total_accessions,
-                                 filename=params.out.joinpath("biologs", f"biolog_tracker_{wildcards.bucket}.log"),
+                                 filename=progress_tracking_log,
+                                 bucket_id=wildcards.bucket,
                                  )
 
         logging_thread = threading.Thread(target=tracker.track_progress, daemon=True)
