@@ -16,6 +16,7 @@ from pybedtools import BedTool
 import numpy as np
 from gff_clean import GFFCleaner
 import pandas as pd
+from scheduling import MiniBucketScheduler
 
 ### > IMPORTS END
 
@@ -69,10 +70,14 @@ rule schedule:
         print(colored(f"Total assemblies detected: {len(assemblies)}.", color))
         if len(assemblies) == 0:
             raise ValueError(f'No assemblies were detected from the path {params.files}.')
+        
+        mini_bucket_scheduler = MiniBucketScheduler()
+        scheduled_files = mini_bucket_scheduler.schedule(assemblies, total_buckets=TOTAL_BUCKETS)
+        mini_bucket_scheduler.saveas(scheduled_files, output[0])
 
-        splitted_jobs = {bucket_id: job.tolist() for bucket_id, job in enumerate(np.array_split(assemblies, TOTAL_BUCKETS), 0)}
-        with open(output[0], mode='w', encoding='UTF-8') as f:
-            json.dump(splitted_jobs, f, indent=4)
+        # splitted_jobs = {bucket_id: job.tolist() for bucket_id, job in enumerate(np.array_split(assemblies, TOTAL_BUCKETS), 0)}
+        #  with open(output[0], mode='w', encoding='UTF-8') as f:
+        #    json.dump(splitted_jobs, f, indent=4)
 
 
 GFF_FIELDS = ["seqID", "source", "compartment", "start", "end", "score", "strand", "phase", "attributes"]

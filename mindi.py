@@ -27,11 +27,9 @@ import shutil
 import uuid
 import sys
 
-
 csv.field_size_limit(sys.maxsize)
 
 ### < IMPORTS END
-
 
 @dataclass
 class Defaults:
@@ -311,9 +309,11 @@ class MindiTool:
                             multiplicity: int = 3) -> "MindiTool":
 
         self.cur_mode = "RE"
-        regex = RegexExtractor(stacker=stacker, 
+        regex = RegexExtractor(
+                               stacker=stacker, 
                                minrep=minrep, 
-                               multiplicity=multiplicity)
+                               multiplicity=multiplicity
+                               )
 
 
         # global extract_name--cluster-config config/cluster_overlap.yaml --cores $j

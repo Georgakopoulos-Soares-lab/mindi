@@ -1,0 +1,4 @@
+accessions/GCF_000002515.2_ASM251v1_genomic.fna.gz
+accessions/GCA_000006645.1_ASM664v1_genomic.fna  
+accessions/GCA_019677325.2_ASM1967732v2_genomic.fna.gz
+accessions/GCF_023122875.1_ASM2312287v1_genomic.fna.gz

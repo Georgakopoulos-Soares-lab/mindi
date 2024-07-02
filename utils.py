@@ -1,6 +1,7 @@
 from Bio import SeqIO
 import time
 import gzip
+import json
 import os
 from pathlib import Path
 import threading
@@ -49,3 +50,7 @@ def parse_fasta(accession: os.PathLike[str]) -> tuple[str]:
         yield str(record.id), str(record.seq).lower()
 
     file.close()
+
+def load_bucket(bucket_id: int, schedule_path: os.PathLike[str]) -> list[str]:
+    with open(schedule_path, mode="r", encoding="UTF-8") as f:
+        return json.load(f)[str(bucket_id)]

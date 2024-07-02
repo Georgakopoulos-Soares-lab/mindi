@@ -4,6 +4,7 @@ import json
 import numpy as np
 import pandas as pd
 from utils import parse_fasta
+from scheduling import MiniBucketScheduler
 
 buckets = config['buckets']
 out = config['out']
@@ -59,12 +60,17 @@ rule schedule:
 
                 assemblies.append(line)
 
-        total_split = params.buckets
-        splitted_batches = {batch_id: job.tolist() for batch_id, job in enumerate(np.array_split(assemblies, total_split))}
         Path(params.out).mkdir(exist_ok=True)
+        total_split = params.buckets
 
-        with open(output[0], mode="w", encoding="UTF-8") as f:
-            json.dump(splitted_batches, f, indent=4)
+        mini_bucket_scheduler = MiniBucketScheduler()
+        scheduled_files = mini_bucket_scheduler.schedule(assemblies, total_buckets=total_split)
+        mini_bucket_scheduler.saveas(scheduled_files, output[0])
+
+        # splitted_batches = {batch_id: job.tolist() for batch_id, job in enumerate(np.array_split(assemblies, total_split))}
+
+        # with open(output[0], mode="w", encoding="UTF-8") as f:
+        #    json.dump(splitted_batches, f, indent=4)
 
 
 rule extractRepeats:
