@@ -1,10 +1,17 @@
 from pathlib import Path
+import argparse
 from termcolor import colored
 
 if __name__ == "__main__":
 
-    all_files_path = "filtered_assemblies.txt"
-    extractions_path = "repeat_out/IR_extracted_accessions"
+    parser = argparse.ArgumentParser()
+    
+    parser.add_argument("--files_path", type=str, default="filtered_assemblies.txt")
+    parser.add_argument("--extractions_path", type=str, default="repeat_out/IR_extracted_accessions")
+
+    args = parser.parse_args()
+    all_files_path = Path(args.files_path).resolve()
+    extractions_path = Path(args.extractions_path).resolve()
 
     accessions = dict()
     extract_id = lambda accession: '_'.join(Path(accession).name.split("_")[:2])

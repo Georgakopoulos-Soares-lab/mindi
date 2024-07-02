@@ -52,14 +52,13 @@ class MiniBucketScheduler(Scheduler):
 
         for i in range(total_buckets):
             files = scheduled_files[i]
-            burden = sum(map(os.path.getsize, files))
-            print(f"Bucket {i+1}: {len(files)} files; {bucket_burden[i] / 1000: .2f} predicted Kbytes; {burden / 1000: .2f} total Kbytes.")
+            print(f"Bucket {i+1}: {len(files)} files; {bucket_burden[i] / 1000: .2f} predicted Kbytes.")
 
         return {bucket_id: job for bucket_id, job in enumerate(scheduled_files)}
 
 class MeanBucketScheduler(Scheduler):
 
-    def schedule(self, files: list[os.PathLike[str]], total_buckets: int) -> list[list[str]]:
+    def schedule(self, files: list[os.PathLike[str]], total_buckets: int) -> dict[str, list[str]]:
         raise NotImplementedYet()
 
 if __name__ == "__main__":
@@ -91,6 +90,8 @@ if __name__ == "__main__":
     
     destination = f"new_schedule_{total_buckets}.json"
     scheduler.saveas(scheduled_files, destination)
+    print(f"New schedule has been saved at {destination}.")
+    
 
 
 
