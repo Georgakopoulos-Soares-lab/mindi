@@ -2,6 +2,7 @@ import json
 import os
 import random
 from abc import abstractmethod
+import uuid
 
 class Scheduler:
     
@@ -75,7 +76,6 @@ if __name__ == "__main__":
     parser.add_argument("--total_buckets", type=int, default=2)
     parser.add_argument("--use_gff", type=int, default=0)
     
-    
     args = parser.parse_args()
     accessions_path = Path(args.accessions_path).resolve()
     total_buckets = args.total_buckets
@@ -100,7 +100,8 @@ if __name__ == "__main__":
     scheduled_files = scheduler.schedule(accessions, total_buckets=total_buckets, use_gff=use_gff)
     
 
-    destination = f"new_schedule_{total_buckets}.json"
+    unique_filename = str(uuid.uuid4()).replace("-", "").replace("_", "")
+    destination = f"new_schedule_{total_buckets}_{unique_filename}.json"
     scheduler.saveas(scheduled_files, destination)
     print(f"New schedule has been saved at {destination}.")
     

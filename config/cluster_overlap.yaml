@@ -2,10 +2,10 @@
 #
 __default__:
         time: "100:00:00"
-        mem: "16GB"
+        mem: "50GB"
         ncpus: 1
         nodes: 1
         account: "izg5139_sc"
         partition: "sla-prio"
-        jobName: "BacteriaArchaeaViralIR"
+        jobName: "BacteriaArchaeaViralMR"
 

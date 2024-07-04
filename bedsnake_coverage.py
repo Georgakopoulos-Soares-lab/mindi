@@ -1,5 +1,8 @@
 # Coverage PIPELINE
 
+__author__ = "Nikol Chantzi"
+__email__ = "nmc6088@psu.edu"
+__version__ = "1.0.1"
 
 ### > IMPORTS BEGIN
 
@@ -57,7 +60,7 @@ rule schedule:
                     line = line.split("\t")[0]
                 
                 # is associated to GFF
-                gff_corresponding = params.gff_parent.joinpath(Path(line).name.replace("fna", "gff"))
+                gff_corresponding = params.gff_parent.joinpath(Path(line).name.replace("fna.gz", "agat.merged.gff"))
 
                 if gff_corresponding.is_file():
                     assemblies.append(str(gff_corresponding))
@@ -75,13 +78,52 @@ rule schedule:
         scheduled_files = mini_bucket_scheduler.schedule(assemblies, total_buckets=TOTAL_BUCKETS)
         mini_bucket_scheduler.saveas(scheduled_files, output[0])
 
-        # splitted_jobs = {bucket_id: job.tolist() for bucket_id, job in enumerate(np.array_split(assemblies, TOTAL_BUCKETS), 0)}
-        #  with open(output[0], mode='w', encoding='UTF-8') as f:
-        #    json.dump(splitted_jobs, f, indent=4)
-
 
 GFF_FIELDS = ["seqID", "source", "compartment", "start", "end", "score", "strand", "phase", "attributes"]
 COVERAGE_FIELDS = ["seqID", "start", "end", "compartment", "biotype", "overlapCount", "totalHits", "bpCovering", "compartmentLength", "coverage"]
+
+rule mergeGFF:
+    input: 
+        '%s/schedule_%s.json' % (out, TOTAL_BUCKETS)
+    output: 
+        '%s/flow/bucket_{bucket}.%s.merged.completed' % (out, mode)
+    params:
+        tempdir=Path(config['tempdir']).resolve(),
+        bedtools_path=Path(config['bedtools_path']).resolve(),
+        destination=Path(config['destination_merged']).resolve()
+    run:
+        Path(f"{out}/flow").mkdir(exist_ok=True)
+        all_compartments = [
+                            ("region", None),
+                            ("gene", None),
+                            ("five_prime_UTR", None),
+                            ("three_prime_UTR", None),
+                            ("gene", "protein_coding"),
+                            ("gene", "non_coding"),
+                            ("exon", None),
+                            ("CDS", None),
+            ]
+        gff_cleaner = GFFCleaner(
+                            tempdir=params.tempdir,
+                            bedtools_path=params.bedtools_path,
+                            all_compartments=all_compartments,
+                        )
+
+        buckets = load_bucket(wildcards.bucket)
+        def extract_name(accession):
+            accession = Path(accession).name
+            return accession.split(".agat.gff")[0]
+
+        for accession in buckets:
+            accession_name = extract_name(accession)
+            destination = params.destination.joinpath(accession_name + ".agat.merged.gff")
+            
+            if destination.is_file():
+                continue
+            
+            merged_gff = gff_cleaner.read(accession, add_exons=False)
+            merged_gff.to_csv(destination, mode="w", index=False, sep="\t", header=True)
+
 
 rule extractCoverage:
     input:
@@ -99,17 +141,8 @@ rule extractCoverage:
         mode=config["mode"],
     run:
         extract_id = lambda accession: '_'.join(Path(accession).name.split("_")[:2])
-        all_compartments = [
-                            ("region", None),
-                            ("gene", None),
-                            ("gene", "protein_coding"),
-                            ("gene", "non_coding"),
-                            ("exon", None),
-                            ("CDS", None),
-            ]
 
         path_to_glob = params.extraction_parent.joinpath(f'{params.mode}_extracted_accessions')
-        print(path_to_glob)
         extractions = {extract_id(file): file for file in path_to_glob.glob("*.csv")}
 
         accessions = load_bucket(wildcards.bucket)
@@ -119,17 +152,13 @@ rule extractCoverage:
         split_category_collection = list(map(str, params.split_collection)) + ["all"]
         coverage_table = []
 
-        gff_cleaner = GFFCleaner(
-                            tempdir=params.tempdir,
-                            bedtools_path=params.bedtools_path
-                        )
-
         total_accessions = len(accessions)
-        progress_tracking_log = params.out.joinpath("biologs", f"biolog_tracker_{wildcards.bucket}.log")
+        progress_tracking_log = params.out.joinpath("biologs", f"biolog_tracker_{mode}_{wildcards.bucket}.log")
         tracker = ProgressTracker(
                                  total_accessions=total_accessions,
                                  filename=progress_tracking_log,
                                  bucket_id=wildcards.bucket,
+                                 sleeping_time=300
                                  )
 
         logging_thread = threading.Thread(target=tracker.track_progress, daemon=True)
@@ -142,12 +171,18 @@ rule extractCoverage:
 
             accession = Path(accession)
             accession_id = extract_id(accession)
+            gff_file = accession
 
-            gff_file = params.gff_parent.joinpath(accession.name.split(".fna")[0] + "agat.gff")
+            # gff_file = params.gff_parent.joinpath(accession.name.split(".gff")[0] + ".agat.merged.gff")
+            if accession_id not in extractions:
+                print(f"Accession {accession_id} has not been extracted. SKipping...")
+                continue
+            
             extraction_file = extractions[accession_id]
 
-            if not gff_file.is_file():
-                raise FileNotFoundError(f'Could not locate gff file for accession {accession}')
+            # if not gff_file.is_file():
+            #    print(f"AGAT {gff_file}.")
+            #    raise FileNotFoundError(f'Could not locate gff file for accession {accession}')
 
             # extraction file
             extract_df = pd.read_table(
@@ -156,7 +191,23 @@ rule extractCoverage:
                                     )
             
             # accession_name = extract_name(accession)
-            gff_df_merged = gff_cleaner.read(gff_file, add_exons=False)
+
+            # headers = [AE013598.1      4940624 4941241 2       Genbank gene    protein_coding]
+            gff_df_merged = pd.read_table(
+                                    gff_file,
+                                    header=None,
+                                    names=["seqID", "start", "end", "overlapCount", "source", "compartment", "biotype"],
+                                    dtype={
+                                            "start": int,
+                                            "end": int
+                                        }
+                                    )
+
+            # try:
+            #    gff_df_merged = gff_cleaner.read(gff_file, add_exons=False)
+            # except Exception:
+            #    gff_df_merged = gff_cleaner.read(accession, add_exons=False)
+
             assert gff_df_merged.shape[0] > 0
 
             # Extractions = Overlapping <>

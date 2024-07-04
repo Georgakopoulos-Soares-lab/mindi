@@ -51,15 +51,17 @@ class GFFCleaner:
         
         if all_compartments is None:
             all_compartments = [
-                                ("region", None),
+                                 ("region", None),
                                  ("CDS", None),
                                  ("exon", None),
                                  ("gene", None),
+                                 ("five_prime_UTR", None),
+                                 ("three_prime_UTR", None),
                                  ("gene", "protein_coding"),
                                  ("gene", "non_coding"),
                             ]
         
-        self.valid_compartments = {"region", "CDS", "exon", "gene"}
+        self.valid_compartments = {"region", "CDS", "exon", "gene", "three_prime_UTR", "five_prime_UTR"}
         self.all_compartments = all_compartments
 
     
@@ -157,15 +159,20 @@ class GFFCleaner:
 
 
         if gff_df.shape[0] == 0:
-
             # read it again
-            gff_df = self.read_gff(gff)
+            extract_name = lambda accession: Path(accession).name.split('.agat')[0]
+            original_gff = Path("/storage/group/izg5139/default/ncbi_database/complete_accessions/2024-03-21_09-07-15/files")
+            gff_name = extract_name(gff)
+            gff_ori = original_gff.joinpath(gff_name + ".gff.gz")
+            gff_df = self.read_gff(gff_ori)
+
             compartments = gff_df['compartment'].unique()
-            if len(compartments) > 1:
-                raise ValueError("Invalid gff compartments after AGAT filtering. Must contain at least 'region'. Accession: {gff}.")
+            if len(compartments) == 0:
+                print(f"Compartments found {compartments}")
+                raise ValueError(f"Invalid gff compartments after AGAT filtering. Must contain at least 'region'. Accession: {gff}.")
 
             if gff_df.shape[0] == 0:
-                raise ValueError("Empty gff dataframe for accession {gff}.")
+                raise ValueError(f"Empty gff dataframe for accession {gff}.")
 
 
         gff_df.loc[:, "start"] = gff_df["start"] - 1
@@ -215,7 +222,9 @@ class GFFCleaner:
     
         if len(merged_gff) > 0:
             merged_gff = pd.concat(merged_gff, axis=0)
-            merged_gff.loc[:, "compartment"] = pd.Categorical(merged_gff["compartment"], categories=["region", "gene", "exon", "CDS"], ordered=True)
+            merged_gff.loc[:, "compartment"] = pd.Categorical(merged_gff["compartment"], 
+                    
+                                categories=["region", "gene", "exon", "CDS", "five_prime_UTR", "three_prime_UTR"], ordered=True)
             
             merged_gff = merged_gff.sort_values(by=['seqID', 'start', 'compartment'], ascending=True)\
                                                       .reset_index(drop=True)
@@ -243,20 +252,33 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--gff", type=str)
-    parser.add_argument("--add_exons", type=int, default=1)
+    parser.add_argument("--add_exons", type=int, default=0)
     parser.add_argument("--bedtools_path", type=str, default="/storage/group/izg5139/default/nicole/miniconda3/bin")
     parser.add_argument("--tempdir", type=str, default="gff_clean_tmp")
-
+    parser.add_argument("--destination", type=str, default="merged_gff")
 
     args = parser.parse_args()
     gff = args.gff
     add_exons = args.add_exons
     bedtools_path = args.bedtools_path
     tempdir_path = args.tempdir
+    destination = Path(args.destination).resolve()
+    destination.mkdir(exist_ok=True)
+
+    def extract_name(gff: os.PathLike[str]) -> str:
+        gff = Path(gff).name
+        if "agat" in gff:
+            return gff.split(".agat")[0]
+
+        return gff.split(".gff")[0]
 
     # bedtools_path = "/home/dollzeta/frogtools/bedtools2/bin"
-
+    
+    gff_name = extract_name(gff)
     cleaner = GFFCleaner(bedtools_path=bedtools_path, tempdir=tempdir_path)
     gff_df = cleaner.read(gff, add_exons=add_exons)
 
-    breakpoint()
+    dest = destination.joinpath(gff_name + ".merged.gff")
+    gff_df.to_csv(dest, mode="w", sep="\t", index=False, header=None)
+
+

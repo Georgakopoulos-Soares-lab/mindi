@@ -1,8 +1,8 @@
-buckets: 50
+buckets: 100
 mode: 'IR'
-out: 'repeat_out'
+out: 'irp_out_no_eukaryotes'
 # files: 'filtered_assemblies_2024_3_22.txt'
-files: 'filtered_assemblies_eukaryota.txt'
+files: 'filtered_assemblies_eukaryotes.txt'
 minrep: 8
 max_spacer_length: 8
 min_arm_length: 10

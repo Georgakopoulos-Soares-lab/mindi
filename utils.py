@@ -10,13 +10,16 @@ from typing import Optional
 
 class ProgressTracker:
 
-    def __init__(self, total_accessions: int, filename: str = "biologs/tracker.log", bucket_id: Optional[int] = None) -> None:
+    def __init__(self, total_accessions: int, 
+                       filename: str = "biologs/tracker.log", 
+                       sleeping_time: int = 300,
+                       bucket_id: Optional[int] = None) -> None:
         self.log_filename = Path(filename).resolve()
         self.log_filename.parent.mkdir(exist_ok=True)
 
         self.bucket_id = bucket_id
 
-        self.sleeping_time = 600 # seconds sleeping time
+        self.sleeping_time = sleeping_time
 
         self.counter = 0
         self.total_accessions = total_accessions

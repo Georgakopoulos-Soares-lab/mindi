@@ -5,18 +5,18 @@ mode=${2:-"IR"}
 
 if [[ $(grep -i Microsoft /proc/version) ]];
 then
-	echo "Initializing bioinformatics nonBDNA extraction analysis. (mode ${mode}; cores ${j}) [LOCAL]. Authored by Nikol Chantzi <3."
-	if [[ $mode == "g4" ]]; then
-		snakemake --snakefile nonbdna_pipe.py --configfile config/config_g4hunter.yaml --latency-wait 5 --cores $j
-	elif [[ $mode == "regex" ]]; then
-		snakemake --snakefile nonbdna_pipe.py --configfile config/config_RE.yaml --latency-wait 5 --cores $j
-	elif [[ $mode == "tandem" ]]; then
-		snakemake --snakefile nonbdna_pipe.py --configfile config/config_STR.yaml --latency-wait 5 --cores $j
-	elif [[ $mode == "IR" ]]; then
-		snakemake --snakefile nonbdna_pipe.py --configfile config/config_IR.yaml --latency-wait 5 --cores $j
-	elif [[ $mode == "MR" ]]; then
-		snakemake --snakefile nonbdna_pipe.py --configfile config/config_MR.yaml --latency-wait 5 --cores $j
-  fi
+    echo "Initializing bioinformatics nonBDNA extraction analysis. (mode ${mode}; cores ${j}) [LOCAL]. Authored by Nikol Chantzi <3."
+    if [[ $mode == "g4" ]]; then
+	snakemake --snakefile nonbdna_pipe.py --configfile config/config_g4hunter.yaml --latency-wait 5 --cores $j
+    elif [[ $mode == "regex" ]]; then
+	snakemake --snakefile nonbdna_pipe.py --configfile config/config_RE.yaml --latency-wait 5 --cores $j
+    elif [[ $mode == "tandem" ]]; then
+	snakemake --snakefile nonbdna_pipe.py --configfile config/config_STR.yaml --latency-wait 5 --cores $j
+    elif [[ $mode == "IR" ]]; then
+	snakemake --snakefile nonbdna_pipe.py --configfile config/config_IR.yaml --latency-wait 5 --cores $j
+    elif [[ $mode == "MR" ]]; then
+	snakemake --snakefile nonbdna_pipe.py --configfile config/config_MR.yaml --latency-wait 5 --cores $j
+    fi
 else
   echo "Initializing bioinformatics genomic compartment coverage analysis. (mode ${mode}; cores ${j}) [SERVER]. Authored by Nikol Chantzi <3."
   if [[ $mode == "g4" ]]; then

@@ -5,7 +5,6 @@ from termcolor import colored
 if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
-    
     parser.add_argument("--files_path", type=str, default="filtered_assemblies.txt")
     parser.add_argument("--extractions_path", type=str, default="repeat_out/IR_extracted_accessions")
 

@@ -192,11 +192,28 @@ rule reduceRepeats:
         out=Path(config["out"]).resolve(),
         buckets=config["buckets"]
     run:
-        files = [extracted_file for extracted_file in params.out.joinpath(f"{mode}_extracted_accessions").glob(f"*.{mode}.csv")]
+        target = params.out.joinpath(f"{mode}_extracted_accessions")
+        print(f"Fetching extracted accessions from target {target}.")
+        files = [extracted_file for extracted_file in target.glob(f"*.{mode}.csv")]
+
+        extract_id = lambda accession: '_'.join(Path(accession).name.split('_')[:2])
         df_all = []
+        empty_assemblies = []
+
         for file in files:
+            print(f"Processing file {file}...")
+            accession_id = extract_id(file)
             df = pd.read_table(file)
+            if df.shape[0] == 0:
+                empty_assemblies.append(file)
+                continue
+
+            df.loc[:, "#assembly_accession"] = accession_id
             df_all.append(df)
+        
+        with open(f"{params.out}/{mode}_completed/empty_accessions.{mode}.txt", mode="w", encoding="UTF-8") as f:
+            for accession in empty_assemblies:
+                f.write(str(accession) + "\n")
 
         df_all = pd.concat(df_all, axis=0)
         df_all.to_parquet(output[0], engine="fastparquet")

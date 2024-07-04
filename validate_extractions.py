@@ -40,12 +40,11 @@ if __name__ == "__main__":
     extractions = {extract_id(accession): accession for accession in extractions_path.glob("*.csv")}
     
     total_accessions = len(files)
-    print(f"Initializing validation procedure for {total_accessions} accessions.")
+    print(f"Initializing validation procedure for bucket {bucket_id} (mode {mode}). Total: {total_accessions} accessions.")
     
     total_ok = 0
     for file in files:
-        
-        print(f"Processing accession {file}...")
+        # print(f"Processing accession {file}...")
 
         accession_id = extract_id(file)
         extracted_accession = extractions.get(accession_id)
@@ -88,9 +87,9 @@ if __name__ == "__main__":
         
         total_ok += 1
 
-        print(f"Accession {accession} has passed all validations!")
+        # print(f"Accession {file} has passed all validations!")
 
-    print(f"Total {total_ok} accessions have been validated out of {total_accessions}!")
+    print(f"Bucket: {bucket_id}. Total {total_ok} accessions have been validated out of {total_accessions}!")
 
                 
 
