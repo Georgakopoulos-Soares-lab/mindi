@@ -23,6 +23,9 @@ class MiniBucketScheduler(Scheduler):
         if use_gff:
             files = [str(file).replace("fna", "gff") for file in files]
 
+        files = list(set(files))
+        total_files = len(files)
+
         scheduled_files = [[] for _ in range(total_buckets)]
         bucket_burden = [0 for _ in range(total_buckets)]
         
@@ -54,11 +57,15 @@ class MiniBucketScheduler(Scheduler):
 
 
         print("Scheduling has been completed succesfully.")
+        total_assigned_files = 0
 
         for i in range(total_buckets):
             files = scheduled_files[i]
+            total_assigned_files += len(set(files))
             print(f"Bucket {i+1}: {len(files)} files; {bucket_burden[i] / 1000: .2f} predicted Kbytes.")
-
+        
+        assert total_assigned_files == total_files, "Invalid number of assignments."
+        assert len(scheduled_files) == total_buckets, "Expected number of buckets: {total_buckets}. Assigned buckets: {len(scheduled_files)}."
         return {bucket_id: job for bucket_id, job in enumerate(scheduled_files)}
 
 class MeanBucketScheduler(Scheduler):

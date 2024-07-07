@@ -10,5 +10,5 @@ window_size: 500
 mode: 'MR'
 gff_parent_coverage: '/storage/group/izg5139/default/nicole/mindi/gff_merged_dataset'
 gff_parent_enrichment: '/storage/group/izg5139/default/nicole/mindi/files'
-extraction_parent: 'repeat_out'
+extraction_parent: '/storage/group/izg5139/default/nicole/mindi/repeat_out'
 tempdir: 'coverage_out/temp'

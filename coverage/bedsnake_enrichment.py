@@ -142,7 +142,7 @@ rule extractEnrichment:
         util_cols = ["seqID", "start", "end"]
 
         print(colored(f"Splitting coverage process on column {params.split_category}.", "blue"))
-        split_category_collection = list(map(str, params.split_collection)) + ["all"]
+        split_category_collection = list(map(int, params.split_collection))
         enrichment_table = []
 
         total_accessions = len(accessions)
@@ -173,7 +173,7 @@ rule extractEnrichment:
 
             accession_id = extract_id(gff_file)
             if accession_id not in extractions:
-                print(f"Accession {accession_id} has not been extracted. SKipping...")
+                print(f"Accession {accession_id} has not been extracted. Skipping...")
                 continue
             
             extraction_file = extractions[accession_id]
@@ -198,7 +198,8 @@ rule extractEnrichment:
 
             unique_compartments = set(gff_df.compartment)
             if params.compartment not in unique_compartments:
-                raise ValueError(f'Invalid compartment detected {params.compartment}.')
+                print(colored(f"Invalid compartment detected {params.compartment} for accession '{gff_file}'.", "red"))
+                continue
 
             gff_df = gff_df[gff_df["compartment"] == params.compartment]\
                                 .reset_index(drop=True)\
@@ -206,6 +207,8 @@ rule extractEnrichment:
             gff_df.loc[:, "biotype"] = gff_df["attributes"].apply(parse_biotype)
             gff_df.loc[:, "start"] = gff_df["start"] - 1
             gff_df.loc[:, "end"] = gff_df["end"] - 1
+
+            print(colored(f"Total {gff_df.shape[0]} {params.compartment}(s) detected for accession '{gff_file}'.", "green"))
         
             # filter first and last exon
             if params.compartment == "exon":
@@ -220,7 +223,6 @@ rule extractEnrichment:
 
                 gff_df.loc[:, f"{cur_site}_start"] = np.maximum(gff_df[site] - params.window_size, 0)
                 gff_df.loc[:, f"{cur_site}_end"] = gff_df[site] + params.window_size + 1
-
 
 
             gene_biotypes = set(gff_df["biotype"])
@@ -245,6 +247,13 @@ rule extractEnrichment:
                                         compartment_df.intersect(extract_bed, wo=True).fn,
                                         header=None,
                                         names=INTERSECT_FIELDS,
+                                        dtype={
+                                            "start": int,
+                                            "end": int,
+                                            "motif_start": int,
+                                            "motif_end": int,
+                                            params.split_category: int,
+                                              }
                                         )
 
                 for biotype in gene_biotypes:
@@ -275,6 +284,7 @@ rule extractEnrichment:
         if len(enrichment_table) > 0:
             enrichment_table = pd.concat(enrichment_table, axis=0)
         else:
+            print(colored(f"No files detected for bucket {wildcards.bucket}.", "red"))
             enrichment_table = pd.DataFrame([], columns=["#assembly_accession",
                                                          "site",
                                                          "biotype",
@@ -300,4 +310,3 @@ rule reduceEnrichment:
 
         enrichment_table = pd.concat(enrichment_table, axis=0)
         enrichment_table.to_parquet(output[0], engine="fastparquet")
-
