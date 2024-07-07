@@ -282,12 +282,13 @@ class MindiTool:
        return self
 
     @nonbdna_register(mode='MR') 
-    def extract_mirror(self,    accession: os.PathLike[str], 
-                                minrep: int = 8, 
-                                min_arm_length: Optional[int] = None, 
-                                max_spacer_length: Optional[int] = None,
+    def extract_mirror(self, accession: os.PathLike[str], 
+                             minrep: int = 8, 
+                             min_arm_length: Optional[int] = None, 
+                             max_spacer_length: Optional[int] = None,
                             ) -> "MindiTool":
-        mindi_table = self.process_table(min_arm_length=min_arm_length, max_spacer_length=max_spacer_length)
+        mindi_table = self.process_table(min_arm_length=min_arm_length, 
+                                         max_spacer_length=max_spacer_length)
         self.cur_mode = 'MR'
         return self
 
@@ -393,12 +394,18 @@ class MindiTool:
                 ) -> "MindiTool":
         raise NotImplementedYet()
 
-
     def process_table(self, min_arm_length: Optional[int] = None, 
                             max_spacer_length: Optional[int] = None, 
                             ) -> "MindiTool":
-        to_drop = ["Source", "Type", "Score", "Strand", "Subset", "Permutations", "Sequence", "Start", "Stop"]
-        
+        to_drop = ["Source",
+                   "Type",
+                   "Score",
+                   "Strand",
+                   "Subset",
+                   "Permutations",
+                   "Sequence",
+                   "Start",
+                   "Stop"]
         tmp_file = tempfile.NamedTemporaryFile(
                                                dir=self.tempdir, 
                                                prefix=str(self.fn).replace(".tsv", "") + ".",
@@ -422,13 +429,11 @@ class MindiTool:
                 reader = csv.DictReader(fh, delimiter="\t")
 
                 for row in reader:
-
                     arm_length = int(row['Repeat'])
                     spacer_length = int(row['Spacer'])
                     sequence = row['Sequence']
 
-                    if (isinstance(min_arm_length, int) and arm_length < min_arm_length) \
-                            or (isinstance(max_spacer_length, int) and spacer_length > max_spacer_length):
+                    if (isinstance(min_arm_length, int) and arm_length < min_arm_length) or (isinstance(max_spacer_length, int) and spacer_length > max_spacer_length):
                         continue
 
                     start = int(row['Start']) - 1
@@ -451,6 +456,7 @@ class MindiTool:
                     del row['Spacer']
                     true_spacer_length = sequence_length - 2 * repeat 
                     right_arm = sequence[repeat+true_spacer_length:]
+                
 
                     if any(n not in nucleotides for n in right_arm) or any(n not in nucleotides for n in sequence_of_arm):
                         continue
@@ -467,7 +473,13 @@ class MindiTool:
                     c_content = composition.group(2)
                     g_content = composition.group(3)
                     t_content = composition.group(4)
-                
+                    
+                    # skip maximum spacer length
+                    if (isinstance(max_spacer_length, int) and true_spacer_length > max_spacer_length):
+
+                        # invalid record?
+                        continue
+
                     row.update({
                             "start": start,
                             "end": end,

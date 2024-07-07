@@ -107,7 +107,12 @@ INTERSECT_FIELDS = ["seqID",
 
 def parse_biotype(attributes: str) -> str:
     if "gene_biotype" in attributes:
-        return attributes.split("gene_biotype=")[1].split(";")[0]
+        gene_biotype = attributes.split("gene_biotype=")[1].split(";")[0]
+
+        if gene_biotype == "protein_coding":
+            return gene_biotype
+
+        return "non_coding"
 
     return "."
 
@@ -310,3 +315,21 @@ rule reduceEnrichment:
 
         enrichment_table = pd.concat(enrichment_table, axis=0)
         enrichment_table.to_parquet(output[0], engine="fastparquet")
+
+
+rule groupByEnrichment:
+    input:
+        '%s/%s/enrichment/enrichment_compartments.%s.parquet' % (out, mode, mode)
+    output:
+        '%s/%s/enrichment/enrichment_compartments.%s.grouped.parquet' % (out, mode, mode)
+    params:
+        window_size=int(config['window_size']),
+        split_category=config['split_category'],
+    run:
+        enrichment_table = pd.read_parquet(input[0], engine="fastparquet")
+        transcription_sites = ["start", "end"]
+
+        for site in transcription_sites:
+            grouped_enrichment = enrichment_table[enrichment_table["site"] == site]\
+                                    .groupby(["biotype", "nucleotide", params.split_collection], as_index=False)\
+                                    .agg({str(i): "sum" for i in range(params.window_size*2+1)})
