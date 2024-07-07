@@ -289,7 +289,9 @@ if __name__ == "__main__":
         if "agat" in accession:
             return accession.split(".agat")[0]
         return accession.split(".gff")[0]
-
+    
+    Path("logs_MERGE").mkdir(exist_ok=True)
+    f = open(f"logs_MERGE/files_processed_bucket_{bucket_id}.txt", mode="w")
     for gff in files:
         gff_name = extract_name(gff)
         destination_file = destination.joinpath(gff_name + ".agat.merged.gff")
@@ -298,9 +300,12 @@ if __name__ == "__main__":
         try:
             gff_df = cleaner.read(gff, add_exons=False)
         except Exception:
-            locate_other_gff = parent_gff.joinpath(gff_name)
-            assert locate_other_gff.is_file()
+            locate_other_gff = parent_gff.joinpath(gff_name + ".gff.gz")
+            assert locate_other_gff.is_file(), f"WOOPSIE! Could not locate file: {locate_other_gff}"
             gff_df = cleaner.read(gff, add_exons=False)
-    
+        
+        f.write(str(gff) + " Processed succesfully.\n")
         gff_df.to_csv(destination_file, sep="\t", index=False, mode="w", header=None)
-
+    
+    f.write(f"Bucket {bucket_id} is OK!\n")
+    f.close()
