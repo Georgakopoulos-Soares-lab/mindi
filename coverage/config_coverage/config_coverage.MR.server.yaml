@@ -5,7 +5,10 @@ split_category: 'spacerLength'
 split_collection: [0, 1, 2, 3, 4, 5, 6, 7, 8]
 bedtools_path: '/storage/group/izg5139/default/nicole/miniconda3/bin'
 destination_merged: 'gff_merged_datasets'
+compartment: 'gene'
+window_size: 500
 mode: 'MR'
-gff_parent: '/storage/group/izg5139/default/nicole/mindi/gff_merged_dataset'
+gff_parent_coverage: '/storage/group/izg5139/default/nicole/mindi/gff_merged_dataset'
+gff_parent_enrichment: '/storage/group/izg5139/default/nicole/mindi/files'
 extraction_parent: 'repeat_out'
 tempdir: 'coverage_out/temp'

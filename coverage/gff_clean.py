@@ -4,7 +4,7 @@ __author__ = "Nikol Chantzi"
 __email__ = "nmc6088@psu.edu"
 __version__ = "1.0.1"
 
-### > IMPORTS BEGIN 
+### > IMPORTS BEGIN
 
 import os
 import tempfile
@@ -18,12 +18,12 @@ import pandas as pd
 ### < IMPORTS END
 
 class GFFCleaner:
-    
+
     GFF_FIELDS: ClassVar[list[str]] = [
-                                       "seqID", 
+                                       "seqID",
                                        "source",
                                        "compartment",
-                                       "start", 
+                                       "start",
                                        "end",
                                        "score",
                                        "strand",
@@ -31,12 +31,11 @@ class GFFCleaner:
                                        "attributes"
                                 ]
 
-    def __init__(self, 
-                 tempdir: Optional[os.PathLike[str]] = None, 
+    def __init__(self, tempdir: Optional[os.PathLike[str]] = None,
                  all_compartments: Optional[list[tuple[str]]] = None,
                  bedtools_path: Optional[os.PathLike[str]] = None,
                  ) -> None:
-        
+
         # CONFIGURATION
 
         if tempdir is None:
@@ -48,7 +47,7 @@ class GFFCleaner:
         self.tempdir = tempdir
         pybedtools.set_tempdir(self.tempdir)
         pybedtools.set_bedtools_path(bedtools_path)
-        
+
         if all_compartments is None:
             all_compartments = [
                                  ("region", None),
@@ -60,11 +59,16 @@ class GFFCleaner:
                                  ("gene", "protein_coding"),
                                  ("gene", "non_coding"),
                             ]
-        
-        self.valid_compartments = {"region", "CDS", "exon", "gene", "three_prime_UTR", "five_prime_UTR"}
+
+        self.valid_compartments = {"region",
+                                   "CDS",
+                                   "exon",
+                                   "gene",
+                                   "three_prime_UTR",
+                                   "five_prime_UTR"}
         self.all_compartments = all_compartments
 
-    
+
     @staticmethod
     def parse_attributes(attributes: str) -> dict[str, str]:
         attributes = attributes.strip()
@@ -72,7 +76,7 @@ class GFFCleaner:
             return attributes
 
         splitted_attributes = attributes.split(";")
-        parsed_attributes = dict()
+        parsed_attributes = {}
         for attr in splitted_attributes:
             name, value = attr.split("=")
             parsed_attributes.update({name: value})
@@ -95,16 +99,18 @@ class GFFCleaner:
     def reduce_biotype(biotype: str) -> str:
         if biotype == "protein_coding":
             return biotype
-        elif biotype != "." and biotype is not None:
+        
+        if biotype != "." and biotype is not None:
             return "non_coding"
+
         return "."
 
-    
+
     def read_gff(self, gff: os.PathLike[str]) -> pd.DataFrame:
         gff_df = pd.read_table(
                             gff,
                             comment="#",
-                            header=None, 
+                            header=None,
                             names=GFFCleaner.GFF_FIELDS,
                             dtype={
                                 "start": int,
@@ -115,18 +121,20 @@ class GFFCleaner:
         return gff_df
 
 
-    def read(self, gff: os.PathLike[str], add_exons: bool = True, reduce_biotype: bool = True) -> pd.DataFrame:
+    def read(self, gff: os.PathLike[str],
+             add_exons: bool = True,
+             reduce_biotype: bool = True) -> pd.DataFrame:
         gff = Path(gff).resolve()
         gff_name = gff.name.split('.gff')[0]
-        
-        unzipped_gff = None
-        
+
+
         if add_exons:
 
             reading_temp_dir = tempfile.TemporaryDirectory(prefix=gff_name + ".", dir=self.tempdir)
             with tempfile.NamedTemporaryFile(
-                                             prefix=gff_name + ".", 
-                                             suffix=".agat", 
+                                             prefix=gff_name + ".",
+                                             suffix=".agat",
+
                                              dir=reading_temp_dir.name,
                                              delete=True
                                             ) as tmp:
@@ -142,13 +150,13 @@ class GFFCleaner:
                 os.chdir(reading_temp_dir.name)
 
                 subprocess.run(
-                           command, 
-                           check=True, 
-                           shell=True, 
-                           stderr=subprocess.DEVNULL, 
+                           command,
+                           check=True,
+                           shell=True,
+                           stderr=subprocess.DEVNULL,
                            stdout=subprocess.DEVNULL
                         )
-                
+
                 gff_df = self.read_gff(filename)
 
             os.chdir(cur_dir)
@@ -190,7 +198,6 @@ class GFFCleaner:
         merged_gff = []
         merge_columns = ["seqID", "start", "end", "compartment", "source"]
         for compartment, biotype in self.all_compartments:
-
             if compartment == "gene":
                 temp_comp = gff_df[(gff_df["compartment"] == compartment) | (gff_df["compartment"] == "pseudogene")]
                 temp_comp.loc[:, "compartment"] = temp_comp["compartment"].replace("pseudogene", compartment)
@@ -207,7 +214,7 @@ class GFFCleaner:
             merged_tool = BedTool.from_dataframe(temp_comp[merge_columns])\
                             .sort()\
                             .merge(
-                                    c=[4, 5], 
+                                    c=[4, 5],
                                     o=["count", "distinct"]
                             )
 
@@ -216,29 +223,29 @@ class GFFCleaner:
                                 header=None,
                                 names=["seqID", "start", "end", "overlapCount", "source"]
                                 )
-            merged_gff_comp.loc[:, "compartment"] = compartment 
+            merged_gff_comp.loc[:, "compartment"] = compartment
             merged_gff_comp.loc[:, "biotype"] = biotype if biotype else "."
             merged_gff.append(merged_gff_comp)
-    
+
         if len(merged_gff) > 0:
             merged_gff = pd.concat(merged_gff, axis=0)
-            merged_gff.loc[:, "compartment"] = pd.Categorical(merged_gff["compartment"], 
-                    
-                                categories=["region", "gene", "exon", "CDS", "five_prime_UTR", "three_prime_UTR"], ordered=True)
-            
-            merged_gff = merged_gff.sort_values(by=['seqID', 'start', 'compartment'], ascending=True)\
-                                                      .reset_index(drop=True)
+            merged_gff.loc[:, "compartment"] = pd.Categorical(merged_gff["compartment"],
+                                categories=["region", "gene", "exon", "CDS", "five_prime_UTR", "three_prime_UTR"],
+                                                              ordered=True)
+            merged_gff = merged_gff.sort_values(by=['seqID', 'start', 'compartment'],
+                                                ascending=True)\
+                                        .reset_index(drop=True)
             merged_gff.loc[:, "compartment"] = merged_gff["compartment"].astype(str)
 
-        else: 
-            merged_gff = pd.DataFrame([], 
+        else:
+            merged_gff = pd.DataFrame([],
                                       columns=[
-                                            "seqID", 
-                                            "start", 
-                                            "end", 
+                                            "seqID",
+                                            "start",
+                                            "end",
                                             "overlapCount",
                                             "source",
-                                            "compartment", 
+                                            "compartment",
                                             "biotype"
                                             ]
                                       )
@@ -252,8 +259,10 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--gff", type=str)
-    parser.add_argument("--add_exons", type=int, default=0)
-    parser.add_argument("--bedtools_path", type=str, default="/storage/group/izg5139/default/nicole/miniconda3/bin")
+    parser.add_argument("--add_exons", type=int,
+                        default=0)
+    parser.add_argument("--bedtools_path", type=str,
+                        default="/storage/group/izg5139/default/nicole/miniconda3/bin")
     parser.add_argument("--tempdir", type=str, default="gff_clean_tmp")
     parser.add_argument("--destination", type=str, default="merged_gff")
 
@@ -273,12 +282,10 @@ if __name__ == "__main__":
         return gff.split(".gff")[0]
 
     # bedtools_path = "/home/dollzeta/frogtools/bedtools2/bin"
-    
+
     gff_name = extract_name(gff)
     cleaner = GFFCleaner(bedtools_path=bedtools_path, tempdir=tempdir_path)
     gff_df = cleaner.read(gff, add_exons=add_exons)
 
     dest = destination.joinpath(gff_name + ".merged.gff")
     gff_df.to_csv(dest, mode="w", sep="\t", index=False, header=None)
-
-

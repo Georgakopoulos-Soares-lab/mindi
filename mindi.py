@@ -212,7 +212,9 @@ class MindiTool:
     HDNA_min_pyrine: ClassVar[float] = 0.9
     HDNA_max_pyrine: ClassVar[float] = 0.9
 
-    def __init__(self, tempdir: Optional[str] = None, nonBDNA: Optional[str] = None, RTRF: Optional[str] = None) -> None:
+    def __init__(self, tempdir: Optional[str] = None,
+                       nonBDNA: Optional[str] = None,
+                 RTRF: Optional[str] = None) -> None:
         load_dotenv()
         if nonBDNA is None:
             nonBDNA = os.getenv('nonBDNA')
