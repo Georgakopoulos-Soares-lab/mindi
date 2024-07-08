@@ -277,6 +277,8 @@ if __name__ == "__main__":
     else:
         files = [gff]
 
+    print(f"Total files {len(files)} detected.")
+
     add_exons = args.add_exons
     bedtools_path = args.bedtools_path
     tempdir_path = args.tempdir
@@ -292,7 +294,9 @@ if __name__ == "__main__":
     
     Path("logs_MERGE").mkdir(exist_ok=True)
     f = open(f"logs_MERGE/files_processed_bucket_{bucket_id}.txt", mode="w")
-    for gff in files:
+    from tqdm import tqdm
+
+    for gff in tqdm(files, leave=True, position=0):
         gff_name = extract_name(gff)
         destination_file = destination.joinpath(gff_name + ".agat.merged.gff")
 
@@ -302,7 +306,7 @@ if __name__ == "__main__":
         except Exception:
             locate_other_gff = parent_gff.joinpath(gff_name + ".gff.gz")
             assert locate_other_gff.is_file(), f"WOOPSIE! Could not locate file: {locate_other_gff}"
-            gff_df = cleaner.read(gff, add_exons=False)
+            gff_df = cleaner.read(locate_other_gff, add_exons=False)
         
         f.write(str(gff) + " Processed succesfully.\n")
         gff_df.to_csv(destination_file, sep="\t", index=False, mode="w", header=None)

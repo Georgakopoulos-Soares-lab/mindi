@@ -175,7 +175,7 @@ rule extractCoverage:
 
             # gff_file = params.gff_parent.joinpath(accession.name.split(".gff")[0] + ".agat.merged.gff")
             if accession_id not in extractions:
-                print(f"Accession {accession_id} has not been extracted. SKipping...")
+                print(f"Accession {accession_id} has not been extracted. Skipping...")
                 continue
             
             extraction_file = extractions[accession_id]
@@ -200,7 +200,9 @@ rule extractCoverage:
                                             "end": int
                                         }
                                     )
-            assert gff_df_merged.shape[0] > 0
+            if gff_df_merged.shape[0] == 0:
+                print(f"Accession {accession} was found without any relevant genomic compartments. Skipping...")
+                continue
             
             # split_category_collection = [0, 1, 2, 3, 4, 5, 6, 7, 8, all]
 

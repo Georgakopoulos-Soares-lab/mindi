@@ -31,7 +31,7 @@ else
     elif [[ $mode == "IR" ]]; then
     	snakemake --snakefile bedsnake_coverage.py --configfile config_coverage/config_coverage.IR.server.yaml -j $j --latency-wait 45 --cluster-config config_coverage/cluster_overlap.yaml --cluster "sbatch -p {cluster.partition} --account={cluster.account} -t  {cluster.time} --mem={cluster.mem} -c {cluster.ncpus} --nodes={cluster.nodes} -o jobOutCoverage${mode}/{cluster.jobName}-%j.out -J {cluster.jobName} -e jobOutCoverage${mode}/{cluster.jobName}-%j.err"
     elif [[ $mode == "MR" ]]; then
-	snakemake --snakefile bedsnake_coverage.py --configfile config_coverage/config_coverage.MR.server.yaml -j $j --latency-wait 5 --cluster-config config_coverage/cluster_overlap.yaml --cluster "sbatch -p {cluster.partition} --account={cluster.account} -t  {cluster.time} --mem={cluster.mem} -c {cluster.ncpus} --nodes={cluster.nodes} -o jobOutCoverage${mode}/{cluster.jobName}-%j.out -J {cluster.jobName} -e jobOutCoverage${mode}/{cluster.jobName}-%j.err"
+	snakemake --snakefile bedsnake_coverage.py --configfile config_coverage/config_coverage.MR.server.yaml -j $j --latency-wait 5 --cluster-config config_coverage/cluster_overlap.yaml --cluster "sbatch -p {cluster.partition} -t  {cluster.time} --mem={cluster.mem} -c {cluster.ncpus} --nodes={cluster.nodes} -o jobOutCoverage${mode}/{cluster.jobName}-%j.out -J {cluster.jobName} -e jobOutCoverage${mode}/{cluster.jobName}-%j.err"
     else
 	echo "Request could not be fullfiled. Reason: Invalid mode $mode."
 	exit 1

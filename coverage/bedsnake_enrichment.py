@@ -43,7 +43,8 @@ extract_id = lambda assembly: '_'.join(Path(assembly).name.split('_')[:2])
 
 rule all:
     input:
-        '%s/%s/enrichment/enrichment_compartments.%s.parquet' % (out, mode, mode)
+        '%s/%s/enrichment/enrichment_compartments.TSS.%s.parquet' % (out, mode, mode),
+        '%s/%s/enrichment/enrichment_compartments.TES.%s.parquet' % (out, mode, mode)
 
 rule schedule:
     output:
@@ -162,7 +163,7 @@ rule extractEnrichment:
         logging_thread = threading.Thread(target=tracker.track_progress, daemon=True)
         logging_thread.start()
 
-        transcription_sites = ["start", "end"]
+        transcription_sites = ["TSS", "TES"]
         pwm = PWMExtractor(mode=params.mode)
 
         if mode == "STR":
@@ -219,29 +220,38 @@ rule extractEnrichment:
             if params.compartment == "exon":
                 gff_df.loc[:, "parentID"] = gff_df["attributes"].apply(extract_parent_id) 
 
-            for site in transcription_sites:
-                
-                if site == "start":
-                    cur_site = "TSS"
-                else:
-                    cur_site = "TES"
-
-                gff_df.loc[:, f"{cur_site}_start"] = np.maximum(gff_df[site] - params.window_size, 0)
-                gff_df.loc[:, f"{cur_site}_end"] = gff_df[site] + params.window_size + 1
-
 
             gene_biotypes = set(gff_df["biotype"])
+            def _fetch_origin(row, site):
+
+                if site != 'TSS' and site != 'TES':
+                    raise ValueError(f'Unknown transcription site {site}.')
+
+                # At the GENIC START return:
+                # the start of GFF when strand is positive
+                # the end of GFF when strand is negative
+                if site == 'TSS':
+                    if row['strand'] == '+':
+                        return row['start']
+                    return row['end']
+                
+                # At the GENIC END return:
+                # the end of GFF when strand is positive
+                # the start of GFF when strand is negative
+                if row['strand'] == '+':
+                    return row['end']
+                return row['start']
+
             for site in transcription_sites:
-                if site == "start":
-                    cur_site = "TSS"
-                else:
-                    cur_site = "TES"
+                gff_df.loc[:, "origin"] = gff_df[["strand", "start", "end"]].apply(lambda row: _fetch_origin(row, site), axis=1)
+                gff_df.loc[:, f"{site}_start"] = np.maximum(gff_df["origin"] - params.window_size, 0)
+                gff_df.loc[:, f"{site}_end"] = gff_df["origin"] + params.window_size + 1
 
                 extract_bed = BedTool.from_dataframe(extract_df)
                 compartment_df = BedTool.from_dataframe(gff_df[[
                                                             "seqID", 
-                                                            f"{cur_site}_start", 
-                                                            f"{cur_site}_end", 
+                                                            f"{site}_start", 
+                                                            f"{site}_end", 
                                                             "strand",
                                                             "biotype", 
                                                     ]]
@@ -305,7 +315,8 @@ rule reduceEnrichment:
         expand('%s/%s/enrichment/enrichment_compartments_bucket_{bucket}.%s.enrichment' % (out, mode, mode), 
                bucket=range(TOTAL_BUCKETS))
     output:
-        '%s/%s/enrichment/enrichment_compartments.%s.parquet' % (out, mode, mode)
+        '%s/%s/enrichment/enrichment_compartments.TSS.%s.parquet' % (out, mode, mode),
+        '%s/%s/enrichment/enrichment_compartments.TES.%s.parquet' % (out, mode, mode)
     run:
         enrichment_table = []
         for bucket in range(TOTAL_BUCKETS):
@@ -314,7 +325,12 @@ rule reduceEnrichment:
             enrichment_table.append(coverage_df)
 
         enrichment_table = pd.concat(enrichment_table, axis=0)
-        enrichment_table.to_parquet(output[0], engine="fastparquet")
+        enrichment_table.set_index("#assembly_accession", inplace=True)
+        enrichment_table_TSS = enrichment_table[enrichment_table['site'] == 'TSS'].drop(columns=['site'])
+        enrichment_table_TES = enrichment_table[enrichment_table['site'] == 'TES'].drop(columns=['site'])
+
+        enrichment_table_TSS.to_parquet(output[0], engine="fastparquet")
+        enrichment_table_TES.to_parquet(output[1], engine="fastparquet")
 
 
 rule groupByEnrichment:

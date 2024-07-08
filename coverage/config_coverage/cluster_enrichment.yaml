@@ -2,7 +2,7 @@
 #
 __default__:
         time: "100:00:00"
-        mem: "400GB"
+        mem: "350GB"
         ncpus: 1
         nodes: 1
         account: "izg5139_sc"
