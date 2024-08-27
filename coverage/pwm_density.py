@@ -7,7 +7,7 @@ class PWMExtractor:
 
     def __init__(self, mode: str) -> None:
         self.mode = mode
-        self.nucleotides = "agctn"
+        self.nucleotides = "agct"
 
     @staticmethod
     def invert(nucleotide: str) -> str:
@@ -20,9 +20,6 @@ class PWMExtractor:
                 return 'c'
             case 'c':
                 return 'g'
-            case 'n':
-                # this is used as a spacer variable;
-                return 'n'
             case _:
                 raise ValueError(f'Unknown nucleotide {nucleotide}.')
 
@@ -57,10 +54,10 @@ class PWMExtractor:
                     sequence = row['sequence']
                     category = row['sru']
                 elif self.mode == "DR" or self.mode == "MR" or self.mode == "IR":
-                    sequence_of_arm = row['sequenceOfArm']
+                    sequence = row['sequence']
                     category = int(row['spacerLength'])
-                    right_hand_side = self.extract_RHS(sequence_of_arm)
-                    sequence = sequence_of_arm + 'n' * category + right_hand_side
+                    # right_hand_side = self.extract_RHS(sequence_of_arm)
+                    # sequence = sequence_of_arm + 'n' * category + right_hand_side
                 else:
                     raise ValueError(f"Invalid PWM mode {self.mode}.")
 

@@ -187,8 +187,35 @@ rule extractEnrichment:
             # extraction file
             extract_df = pd.read_table(
                                        extraction_file, 
-                                       usecols=["seqID", "start", "end", sequence_col, params.split_category]
+                                       usecols=["seqID", "start", "end", sequence_col, params.split_category, "sequence"]
                                     )
+            if params.mode == "MR":
+
+                print("Filtering H-DNA!")
+                # H-DNA filtering
+                extract_df.loc[:, "sequenceLength"]  = extract_df["sequence"].apply(len)
+                extract_df.loc[:, "at_content"] = extract_df["sequence"].str.count("a|t")
+                extract_df.loc[:, "at_content"] = extract_df["at_content"].div(extract_df["sequenceLength"])
+
+                extract_df.loc[:, "pyrine"] = extract_df["sequence"].str.count("g|a").div(extract_df["sequenceLength"])
+                extract_df.loc[:, "pyrimidine"] = extract_df["sequence"].str.count("c|t").div(extract_df["sequenceLength"])
+
+                extract_df = extract_df[((extract_df["pyrine"] >= 0.9) | (extract_df["pyrimidine"] >= 0.9)) & (extract_df["at_content"] <= 0.8)]
+
+                if extract_df.shape[0] == 0:
+                    print(f"No H-DNA for accession {gff_file}! Skipping...")
+                    continue
+
+                extract_df = extract_df.reset_index(drop=True)\
+                                        .drop(columns=[
+                                                "pyrine",
+                                                "pyrimidine",
+                                                "at_content",
+                                                "sequenceLength",
+                                                "sequence",
+                                                ]
+                                        )
+
             
             # accession_name = extract_name(accession)
             gff_df = pd.read_table(
@@ -242,6 +269,9 @@ rule extractEnrichment:
                     return row['end']
                 return row['start']
 
+
+            compartment_stats = []
+
             for site in transcription_sites:
                 gff_df.loc[:, "origin"] = gff_df[["strand", "start", "end"]].apply(lambda row: _fetch_origin(row, site), axis=1)
                 gff_df.loc[:, f"{site}_start"] = np.maximum(gff_df["origin"] - params.window_size, 0)
@@ -270,7 +300,16 @@ rule extractEnrichment:
                                             params.split_category: int,
                                               }
                                         )
-
+                
+                # TS_aggregated_statistics = intersect_df.groupby(["seqID", "start", "end"], as_index=False)\
+                #                                       .agg(
+                #                                            overlap=("overlap", "sum"),
+                #                                            totalGenes=("overlap", "count"),
+                #                                        )
+                # TS_aggregated_statistics.loc[:, "atLeastOne"] = (TS_aggregated_statistics["overlap"] > 0).astype(int)
+                # comparment_stats.append(TS_aggregated_statistics["atLeastOne"].value_counts())
+                # intersect_df = intersect_df[intersect_df["overlap"] > 0].reset_index(drop=True)
+                
                 for biotype in gene_biotypes:
                     for attribute in params.split_collection:
                         
@@ -279,7 +318,8 @@ rule extractEnrichment:
                         vector_counts = pwm.extract_PWM(intersect_temp, window_size=params.window_size)
                         vector_counts = pd.DataFrame(vector_counts).T\
                                 .reset_index()\
-                                .rename(columns={"index": "nucleotide"})
+                                .rename(columns={"index": "nucleotide"})\
+                                .rename(columns={str(i): f"{int(i)-params.window_size}" for i in range(2*params.window_size+1)})
                         vector_counts.loc[:, "site"] = site
                         vector_counts.loc[:, params.split_category] = attribute
                         vector_counts.loc[:, "biotype"] = biotype
@@ -291,7 +331,7 @@ rule extractEnrichment:
                                                        "site",
                                                        "biotype",
                                                        params.split_category,
-                                                       "nucleotide"] + list(range(params.window_size*2+1))]
+                                                       "nucleotide"] + list(range(-params.window_size, params.window_size+1))]
 
                         assert prev_cols == set(vector_counts.columns), "Invalid columns."
                         enrichment_table.append(vector_counts)
@@ -304,7 +344,7 @@ rule extractEnrichment:
                                                          "site",
                                                          "biotype",
                                                          params.split_category,
-                                                         "nucleotide"] + list(range(params.window_size*2+1)))
+                                                         "nucleotide"] + list(range(-params.window_size, params.window_size+1))
         pybedtools.helpers.cleanup(remove_all=False)
         enrichment_table.set_index("#assembly_accession", inplace=True)
         enrichment_table.to_csv(output[0], sep="\t", index=True, mode="w")
@@ -348,4 +388,4 @@ rule groupByEnrichment:
         for site in transcription_sites:
             grouped_enrichment = enrichment_table[enrichment_table["site"] == site]\
                                     .groupby(["biotype", "nucleotide", params.split_collection], as_index=False)\
-                                    .agg({str(i): "sum" for i in range(params.window_size*2+1)})
+                                    .agg({str(i): "sum" for i in range(-params.window_size, params.window_size+1)})

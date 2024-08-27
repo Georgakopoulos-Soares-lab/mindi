@@ -37,12 +37,15 @@ if __name__ == "__main__":
     files = load_bucket(bucket_id, schedule)
     
     extract_id = lambda accession: '_'.join(Path(accession).name.split("_")[:2])
+    extract_id = lambda accession: Path(accession).name.split('.')[0]
     extractions = {extract_id(accession): accession for accession in extractions_path.glob("*.csv")}
     
     total_accessions = len(files)
     print(f"Initializing validation procedure for bucket {bucket_id} (mode {mode}). Total: {total_accessions} accessions.")
     
     total_ok = 0
+    flag = 0
+    total_non_empty = 0
     for file in files:
         # print(f"Processing accession {file}...")
 
@@ -58,12 +61,14 @@ if __name__ == "__main__":
 
 
         for seqID, seq in parse_fasta(file):
-
+            
             temp = extracted_df[extracted_df['seqID'] == seqID]
             total_found = temp.shape[0]
+            total_non_empty += int(total_found > 0)
             total_validated = 0
 
             for _, row in temp.iterrows():
+                flag = 1
                 start = int(row['start'])
                 end = int(row['end'])
                 sequence_of_arm = row['sequenceOfArm']
@@ -88,8 +93,9 @@ if __name__ == "__main__":
         total_ok += 1
 
         # print(f"Accession {file} has passed all validations!")
-
-    print(f"Bucket: {bucket_id}. Total {total_ok} accessions have been validated out of {total_accessions}!")
+    
+    assert flag == 1
+    print(f"Bucket: {bucket_id}. Total {total_ok} accessions have been validated out of {total_accessions}! Total non empty {total_non_empty}.")
 
                 
 

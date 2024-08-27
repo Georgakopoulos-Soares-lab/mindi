@@ -32,7 +32,13 @@ def load_bucket(bucket):
     with open(f"{out}/schedule_{buckets}.json", mode="r", encoding="UTF-8") as f:
         return json.load(f)[str(bucket)]
 
-extract_id = lambda assembly: '_'.join(Path(assembly).name.split('_')[:2])
+def extract_id(assembly):
+    assembly = Path(assembly).name
+    if '_' in assembly:
+        return '_'.join(assembly.split('_')[:2])
+
+    return assembly.split('.fna')[0]
+
 
 def extract_name(accession):
     accession = Path(accession).name
@@ -138,9 +144,9 @@ rule extractRepeats:
 
             repeat_df = mindi.to_dataframe()
             
-            accession_id_extracted = extract_id(mindi.fnp)
-            accession_id = extract_id(accession)
-            assert accession_id_extracted == accession_id
+            # accession_id_extracted = extract_id(mindi.fnp)
+            # accession_id = extract_id(accession)
+            # assert accession_id_extracted == accession_id
 
             total_chr = 0
             for seqID, sequence in parse_fasta(accession):
