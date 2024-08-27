@@ -15,11 +15,10 @@ from pathlib import Path
 from termcolor import colored
 import functools
 import re
-from typing import ClassVar, Optional, Callable, Iterator
+from typing import ClassVar, Optional, Iterator
 from dotenv import load_dotenv
 from tailhunter import hunt_tail
 import os
-import stat
 import gzip
 from utils import parse_fasta
 from dataclasses import dataclass
@@ -70,7 +69,7 @@ def nonbdna_register(mode):
             #    shutil.rmtree(accession_tmp_dir)
 
             cur_dir = os.getcwd()
-            
+
             if 'minrep' in kwargs:
                 minrep = kwargs['minrep']
             elif len(args) > 1:
@@ -84,40 +83,36 @@ def nonbdna_register(mode):
 
                 # gzip compression strategy
                 with tempfile.NamedTemporaryFile(
-                                                 dir=accession_tmp_dir_path, 
-                                                 delete=False, 
+                                                 dir=accession_tmp_dir_path,
+                                                 delete=False,
                                                  suffix='.fna') as unzipped_tmp:
 
                     with gzip.open(accession, 'rb') as handler:
                         unzipped_tmp.write(handler.read())
 
                     accession = Path(unzipped_tmp.name).name
-            
-            elif accession.name.endswith(".xz"):
 
-                # different compression strategy
-                raise NotImplementedYet()
 
             os.chdir(accession_tmp_dir_path)
 
             out_tsv = accession_tmp_dir_path.joinpath(accession_name + f'_{mode}.tsv')
             out_gff = accession_tmp_dir_path.joinpath(accession_name + f'_{mode}.gff')
             rand_accession_name = str(uuid.uuid4())
-            
+
             match mode:
                 case 'IR':
                     command = f"{self.nonBDNA} -seq {accession} -out {rand_accession_name} -minIRrep {minrep} -skipAPR -skipSTR -skipMR -skipDR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
                 case 'MR':
                     command = f"{self.nonBDNA} -seq {accession} -out {rand_accession_name} -minMRrep {minrep} -skipAPR -skipSTR -skipIR -skipDR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
                 case 'DR':
-                    raise NotImplementedYet('Direct Repeats Finder is not currently supported by this version of Mindi.')
+                    raise NotImplementedError('Direct Repeats Finder is not currently supported by this version of Mindi.')
                 case 'STR':
-                    raise NotImplementedYet('Short Tandem Repeats are not supported yet!')
+                    raise NotImplementedError('Short Tandem Repeats are not supported yet!')
                 case _:
                     raise ValueError(f'Unknown mode {mode}.')
-            
 
-            _ = subprocess.run(command, shell=True, 
+
+            _ = subprocess.run(command, shell=True,
                                         check=True,
                                         stdout=subprocess.DEVNULL,
                                         stderr=subprocess.DEVNULL,
@@ -133,7 +128,7 @@ def nonbdna_register(mode):
             destination = self.tempdir.joinpath(accession_name + f'_{mode}.tsv')
             if destination.is_file():
                 os.remove(destination)
-            
+
             shutil.move(out_tsv, destination)
 
             # remove redundant files
@@ -151,20 +146,20 @@ def nonbdna_register(mode):
 
 
 class MindiTool:
-    
+
     MINDI_FIELDS: ClassVar[list[str]] = [
-                                         "seqID", 
-                                         "start", 
-                                         "end", 
-                                         "sequenceOfArm", 
-                                         "sequenceOfSpacer", 
-                                         "sequence", 
-                                         "armLength", 
-                                         "spacerLength", 
-                                         "length", 
-                                         "arm_a", 
-                                         "arm_c", 
-                                         "arm_g", 
+                                         "seqID",
+                                         "start",
+                                         "end",
+                                         "sequenceOfArm",
+                                         "sequenceOfSpacer",
+                                         "sequence",
+                                         "armLength",
+                                         "spacerLength",
+                                         "length",
+                                         "arm_a",
+                                         "arm_c",
+                                         "arm_g",
                                          "arm_t"
                                          ]
 
@@ -181,25 +176,25 @@ class MindiTool:
                     ]
 
     TAIL_FIELDS: ClassVar[list[str]] = [
-                            "seqID", 
-                            "start", 
-                            "end", 
-                            "sequence", 
-                            "length", 
-                            "consensus", 
-                            "sru", 
+                            "seqID",
+                            "start",
+                            "end",
+                            "sequence",
+                            "length",
+                            "consensus",
+                            "sru",
                             "consensus_repeats"
                             ]
 
     FRAME_FIELDS: ClassVar[list[str]] = [
-                             "seqID", 
-                             "start", 
-                             "end", 
-                             "sequenceOfArm", 
-                             "sequenceOfSpacer", 
-                             "sequence", 
-                             "armLength", 
-                             "spacerLength", 
+                             "seqID",
+                             "start",
+                             "end",
+                             "sequenceOfArm",
+                             "sequenceOfSpacer",
+                             "sequence",
+                             "armLength",
+                             "spacerLength",
                              "sequenceLength",
                              "arm_a",
                              "arm_g",
@@ -244,7 +239,7 @@ class MindiTool:
 
     def moveto(self, dest: os.PathLike[str]) -> None:
         shutil.move(self.fnp, dest)
-    
+
     def to_dataframe(self, usecols: bool = True) -> pd.DataFrame:
         # STILL EXPERIMENTAL
         if self.cur_mode == 'RE' or self.cur_mode == "TAIL":
@@ -266,28 +261,28 @@ class MindiTool:
     def set_tempdir(self, tempdir: os.PathLike[str]) -> None:
         self.tempdir = Path(tempdir).resolve()
         self.tempdir.mkdir(exist_ok=True)
-    
+
     @nonbdna_register(mode='IR')
-    def extract_inverted(self, accession: os.PathLike[str], 
-                        minrep: int = 8, 
-                        min_arm_length: Optional[int] = None, 
+    def extract_inverted(self, accession: os.PathLike[str],
+                        minrep: int = 8,
+                        min_arm_length: Optional[int] = None,
                         max_spacer_length: Optional[int] = None,
                ) -> "MindiTool":
 
        mindi_table = self.process_table(
-                    min_arm_length=min_arm_length, 
+                    min_arm_length=min_arm_length,
                     max_spacer_length=max_spacer_length
                     )
        self.cur_mode = 'IR'
        return self
 
-    @nonbdna_register(mode='MR') 
-    def extract_mirror(self, accession: os.PathLike[str], 
-                             minrep: int = 8, 
-                             min_arm_length: Optional[int] = None, 
+    @nonbdna_register(mode='MR')
+    def extract_mirror(self, accession: os.PathLike[str],
+                             minrep: int = 8,
+                             min_arm_length: Optional[int] = None,
                              max_spacer_length: Optional[int] = None,
                             ) -> "MindiTool":
-        mindi_table = self.process_table(min_arm_length=min_arm_length, 
+        mindi_table = self.process_table(min_arm_length=min_arm_length,
                                          max_spacer_length=max_spacer_length)
         self.cur_mode = 'MR'
         return self
@@ -306,15 +301,15 @@ class MindiTool:
 
         return mindi_table
 
-    def extract_regex(self, accession: os.PathLike[str], 
-                            stacker: str = "g", 
+    def extract_regex(self, accession: os.PathLike[str],
+                            stacker: str = "g",
                             minrep: int = 3,
                             multiplicity: int = 3) -> "MindiTool":
 
         self.cur_mode = "RE"
         regex = RegexExtractor(
-                               stacker=stacker, 
-                               minrep=minrep, 
+                               stacker=stacker,
+                               minrep=minrep,
                                multiplicity=multiplicity
                                )
 
@@ -354,18 +349,18 @@ class MindiTool:
 
     def extract_tails(self, accession: os.PathLike[str], minrepeat: int = 8) -> "MindiTool":
         self.cur_mode = "TAIL"
-        with tempfile.NamedTemporaryFile(dir=self.tempdir, 
-                                         delete=False, 
-                                         suffix=".tail", 
+        with tempfile.NamedTemporaryFile(dir=self.tempdir,
+                                         delete=False,
+                                         suffix=".tail",
                                          mode="w") as file:
             dict_writer = csv.DictWriter(
-                                         file, 
-                                         delimiter="\t", 
+                                         file,
+                                         delimiter="\t",
                                          fieldnames=MindiTool.TAIL_FIELDS
                                          )
             dict_writer.writeheader()
             for seqID, sequence in parse_fasta(accession):
-                for mononucleotide_tail in hunt_tail(sequence=sequence, 
+                for mononucleotide_tail in hunt_tail(sequence=sequence,
                                                      minrepeat=minrepeat,
                                                      seqID=seqID
                                                      ):
@@ -376,26 +371,26 @@ class MindiTool:
 
 
     @nonbdna_register(mode='STR')
-    def extract_tandem(self, accession: os.PathLike[str], 
+    def extract_tandem(self, accession: os.PathLike[str],
                              min_sru: Optional[int] = None) -> "MindiTool":
-        raise NotImplementedYet()
+        raise NotImplementedError()
         self._process_RTRF()
 
 
     def _process_RTRF(self) -> "MindiTool":
-        raise NotImplementedYet()
+        raise NotImplementedError()
 
 
     @nonbdna_register(mode='DR')
-    def extract_direct(self, accession: os.PathLike[str], 
+    def extract_direct(self, accession: os.PathLike[str],
                     minrep: int = 8,
                     min_arm_length: Optional[int] = None,
                     max_spacer_length: Optional[int] = None
                 ) -> "MindiTool":
-        raise NotImplementedYet()
+        raise NotImplementedError()
 
-    def process_table(self, min_arm_length: Optional[int] = None, 
-                            max_spacer_length: Optional[int] = None, 
+    def process_table(self, min_arm_length: Optional[int] = None,
+                            max_spacer_length: Optional[int] = None,
                             ) -> "MindiTool":
         to_drop = ["Source",
                    "Type",
@@ -407,10 +402,10 @@ class MindiTool:
                    "Start",
                    "Stop"]
         tmp_file = tempfile.NamedTemporaryFile(
-                                               dir=self.tempdir, 
+                                               dir=self.tempdir,
                                                prefix=str(self.fn).replace(".tsv", "") + ".",
-                                               suffix=".tsv", 
-                                               delete=False, 
+                                               suffix=".tsv",
+                                               delete=False,
                                                mode="w"
                                             )
         self.fnp = tmp_file.name
@@ -418,8 +413,8 @@ class MindiTool:
 
         with tmp_file as fout:
             fout_writer = csv.DictWriter(
-                                         fout, 
-                                         delimiter="\t", 
+                                         fout,
+                                         delimiter="\t",
                                          fieldnames=MindiTool.FRAME_FIELDS
                                          )
 
@@ -454,9 +449,9 @@ class MindiTool:
 
                     # find spacer
                     del row['Spacer']
-                    true_spacer_length = sequence_length - 2 * repeat 
+                    true_spacer_length = sequence_length - 2 * repeat
                     right_arm = sequence[repeat+true_spacer_length:]
-                
+
 
                     if any(n not in nucleotides for n in right_arm) or any(n not in nucleotides for n in sequence_of_arm):
                         continue
@@ -473,7 +468,7 @@ class MindiTool:
                     c_content = composition.group(2)
                     g_content = composition.group(3)
                     t_content = composition.group(4)
-                    
+
                     # skip maximum spacer length
                     if (isinstance(max_spacer_length, int) and true_spacer_length > max_spacer_length):
 
@@ -521,9 +516,9 @@ class RegexExtractor:
         self.strict_motif = "%s" % (self.stacker * self.minrep) + "[agct]{1,7}"
         self.strict_motif = self.strict_motif * self.multiplicity + self.strict_motif
 
-        # self.complementary_strict_motif 
+        # self.complementary_strict_motif
 
-    
+
     @staticmethod
     def complement(nucleotide: str) -> str:
         match nucleotide:
@@ -589,8 +584,8 @@ class RegexExtractor:
                     )
 
                 table = sorted(
-                               table, 
-                               key=lambda x: (x['seqID'], x['start']), 
+                               table,
+                               key=lambda x: (x['seqID'], x['start']),
                                reverse=False
                                )
                 yield table

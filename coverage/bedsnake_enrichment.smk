@@ -57,16 +57,16 @@ rule schedule:
         with open(params.files, mode='r', encoding='UTF-8') as f:
             for line in f:
                 line = line.strip()
-                
+
                 if line.count("\t") > 0:
                     line = line.split("\t")[0]
-                
+
                 # is associated to GFF
                 gff_corresponding = params.gff_parent.joinpath(Path(line).name.replace("fna", "gff"))
 
                 if gff_corresponding.is_file():
                     assemblies.append(str(gff_corresponding))
-        
+
         if len(assemblies) == 0:
             color = "red"
         else:
@@ -75,7 +75,7 @@ rule schedule:
         print(colored(f"Total assemblies detected: {len(assemblies)}.", color))
         if len(assemblies) == 0:
             raise ValueError(f'No assemblies were detected from the path {params.files}.')
-        
+
         mini_bucket_scheduler = MiniBucketScheduler()
         scheduled_files = mini_bucket_scheduler.schedule(assemblies, total_buckets=TOTAL_BUCKETS)
         mini_bucket_scheduler.saveas(scheduled_files, output[0])
@@ -93,13 +93,13 @@ GFF_FIELDS = [
               "attributes"
               ]
 
-INTERSECT_FIELDS = ["seqID", 
-                    "start", 
-                    "end", 
-                    "strand", 
-                    "biotype", 
+INTERSECT_FIELDS = ["seqID",
+                    "start",
+                    "end",
+                    "strand",
+                    "biotype",
                     "chromosome",
-                    "motif_start", 
+                    "motif_start",
                     "motif_end",
                     "sequenceOfArm",
                     "spacerLength",
@@ -181,12 +181,12 @@ rule extractEnrichment:
             if accession_id not in extractions:
                 print(f"Accession {accession_id} has not been extracted. Skipping...")
                 continue
-            
+
             extraction_file = extractions[accession_id]
 
             # extraction file
             extract_df = pd.read_table(
-                                       extraction_file, 
+                                       extraction_file,
                                        usecols=["seqID", "start", "end", sequence_col, params.split_category, "sequence"]
                                     )
             if params.mode == "MR":
@@ -216,7 +216,7 @@ rule extractEnrichment:
                                                 ]
                                         )
 
-            
+
             # accession_name = extract_name(accession)
             gff_df = pd.read_table(
                                     gff_file,
@@ -242,10 +242,10 @@ rule extractEnrichment:
             gff_df.loc[:, "end"] = gff_df["end"] - 1
 
             print(colored(f"Total {gff_df.shape[0]} {params.compartment}(s) detected for accession '{gff_file}'.", "green"))
-        
+
             # filter first and last exon
             if params.compartment == "exon":
-                gff_df.loc[:, "parentID"] = gff_df["attributes"].apply(extract_parent_id) 
+                gff_df.loc[:, "parentID"] = gff_df["attributes"].apply(extract_parent_id)
 
 
             gene_biotypes = set(gff_df["biotype"])
@@ -261,7 +261,7 @@ rule extractEnrichment:
                     if row['strand'] == '+':
                         return row['start']
                     return row['end']
-                
+
                 # At the GENIC END return:
                 # the end of GFF when strand is positive
                 # the start of GFF when strand is negative
@@ -279,11 +279,11 @@ rule extractEnrichment:
 
                 extract_bed = BedTool.from_dataframe(extract_df)
                 compartment_df = BedTool.from_dataframe(gff_df[[
-                                                            "seqID", 
-                                                            f"{site}_start", 
-                                                            f"{site}_end", 
+                                                            "seqID",
+                                                            f"{site}_start",
+                                                            f"{site}_end",
                                                             "strand",
-                                                            "biotype", 
+                                                            "biotype",
                                                     ]]
                                             )\
                                         .sort()
@@ -300,7 +300,7 @@ rule extractEnrichment:
                                             params.split_category: int,
                                               }
                                         )
-                
+
                 # TS_aggregated_statistics = intersect_df.groupby(["seqID", "start", "end"], as_index=False)\
                 #                                       .agg(
                 #                                            overlap=("overlap", "sum"),
@@ -309,10 +309,10 @@ rule extractEnrichment:
                 # TS_aggregated_statistics.loc[:, "atLeastOne"] = (TS_aggregated_statistics["overlap"] > 0).astype(int)
                 # comparment_stats.append(TS_aggregated_statistics["atLeastOne"].value_counts())
                 # intersect_df = intersect_df[intersect_df["overlap"] > 0].reset_index(drop=True)
-                
+
                 for biotype in gene_biotypes:
                     for attribute in params.split_collection:
-                        
+
                         print(f"Bucket {wildcards.bucket}; Processing {biotype=};{params.split_category}={attribute}...")
                         intersect_temp = intersect_df[(intersect_df['biotype'] == biotype) & (intersect_df[params.split_category] == attribute)]
                         vector_counts = pwm.extract_PWM(intersect_temp, window_size=params.window_size)
@@ -324,7 +324,7 @@ rule extractEnrichment:
                         vector_counts.loc[:, params.split_category] = attribute
                         vector_counts.loc[:, "biotype"] = biotype
                         vector_counts.loc[:, "#assembly_accession"] = accession_id
-                        
+
                         prev_cols = set(vector_counts.columns)
                         # column rearrangement
                         vector_counts = vector_counts[["#assembly_accession",
@@ -335,7 +335,7 @@ rule extractEnrichment:
 
                         assert prev_cols == set(vector_counts.columns), "Invalid columns."
                         enrichment_table.append(vector_counts)
-        
+
         if len(enrichment_table) > 0:
             enrichment_table = pd.concat(enrichment_table, axis=0)
         else:
@@ -352,7 +352,7 @@ rule extractEnrichment:
 
 rule reduceEnrichment:
     input:
-        expand('%s/%s/enrichment/enrichment_compartments_bucket_{bucket}.%s.enrichment' % (out, mode, mode), 
+        expand('%s/%s/enrichment/enrichment_compartments_bucket_{bucket}.%s.enrichment' % (out, mode, mode),
                bucket=range(TOTAL_BUCKETS))
     output:
         '%s/%s/enrichment/enrichment_compartments.TSS.%s.parquet' % (out, mode, mode),

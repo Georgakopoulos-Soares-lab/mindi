@@ -6,12 +6,12 @@ import shutil
 import os
 from pathlib import Path
 
-def agatify(gff_files: list[os.PathLike[str]], destination: os.PathLike[str]) -> None:
+def agatify(gff_files: list[str], destination: os.PathLike[str]) -> None:
     extract_name = lambda accession: Path(accession).name.split('.gff')[0]
     total_gff_files = len(gff_files)
     destination = Path(destination).resolve()
     destination.mkdir(exist_ok=True)
-    
+
     # remove potential duplicates
     gff_files = list(set(gff_files))
 
@@ -19,7 +19,7 @@ def agatify(gff_files: list[os.PathLike[str]], destination: os.PathLike[str]) ->
     for file in tqdm(gff_files, total=total_gff_files, leave=True, position=0):
         file = Path(file).resolve()
         dest_name = extract_name(file) + ".agat.gff"
-        
+
         destination_file = destination.joinpath(dest_name)
         if destination_file.is_file():
             print(f"Destination file '{destination_file}' already exists!")
@@ -53,7 +53,7 @@ if __name__ == "__main__":
     parser.add_argument("--bucket_id", type=int, default=0)
     parser.add_argument("--destination", type=str, default="gff_agatified")
     parser.add_argument("--schedule_path", type=str, default="schedule_100.json")
-    
+
     args = parser.parse_args()
     destination = args.destination
     bucket_id = args.bucket_id

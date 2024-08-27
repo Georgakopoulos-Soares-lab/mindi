@@ -55,16 +55,16 @@ rule schedule:
         with open(params.files, mode='r', encoding='UTF-8') as f:
             for line in f:
                 line = line.strip()
-                
+
                 if line.count("\t") > 0:
                     line = line.split("\t")[0]
-                
+
                 # is associated to GFF
                 gff_corresponding = params.gff_parent.joinpath(Path(line).name.replace("fna.gz", "agat.merged.gff"))
 
                 if gff_corresponding.is_file():
                     assemblies.append(str(gff_corresponding))
-        
+
         if len(assemblies) == 0:
             color = "red"
         else:
@@ -73,7 +73,7 @@ rule schedule:
         print(colored(f"Total assemblies detected: {len(assemblies)}.", color))
         if len(assemblies) == 0:
             raise ValueError(f'No assemblies were detected from the path {params.files}.')
-        
+
         mini_bucket_scheduler = MiniBucketScheduler()
         scheduled_files = mini_bucket_scheduler.schedule(assemblies, total_buckets=TOTAL_BUCKETS)
         mini_bucket_scheduler.saveas(scheduled_files, output[0])
@@ -83,9 +83,9 @@ GFF_FIELDS = ["seqID", "source", "compartment", "start", "end", "score", "strand
 COVERAGE_FIELDS = ["seqID", "start", "end", "compartment", "biotype", "overlapCount", "totalHits", "bpCovering", "compartmentLength", "coverage"]
 
 rule mergeGFF:
-    input: 
+    input:
         '%s/schedule_coverage_%s.json' % (out, TOTAL_BUCKETS)
-    output: 
+    output:
         '%s/flow/bucket_{bucket}.%s.merged.completed' % (out, mode)
     params:
         tempdir=Path(config['tempdir']).resolve(),
@@ -117,10 +117,10 @@ rule mergeGFF:
         for accession in buckets:
             accession_name = extract_name(accession)
             destination = params.destination.joinpath(accession_name + ".agat.merged.gff")
-            
+
             if destination.is_file():
                 continue
-            
+
             merged_gff = gff_cleaner.read(accession, add_exons=False)
             merged_gff.to_csv(destination, mode="w", index=False, sep="\t", header=True)
 
@@ -177,7 +177,7 @@ rule extractCoverage:
             if accession_id not in extractions:
                 print(f"Accession {accession_id} has not been extracted. Skipping...")
                 continue
-            
+
             extraction_file = extractions[accession_id]
 
             # if not gff_file.is_file():
@@ -186,10 +186,10 @@ rule extractCoverage:
 
             # extraction file
             extract_df = pd.read_table(
-                                       extraction_file, 
+                                       extraction_file,
                                        usecols=["seqID", "start", "end", params.split_category]
                                     )
-            
+
             # accession_name = extract_name(accession)
             gff_df_merged = pd.read_table(
                                     gff_file,
@@ -203,7 +203,7 @@ rule extractCoverage:
             if gff_df_merged.shape[0] == 0:
                 print(f"Accession {accession} was found without any relevant genomic compartments. Skipping...")
                 continue
-            
+
             # split_category_collection = [0, 1, 2, 3, 4, 5, 6, 7, 8, all]
 
             for split_value in split_category_collection:
@@ -215,11 +215,11 @@ rule extractCoverage:
 
                 extract_df_temp = BedTool.from_dataframe(temp)
                 compartment_df = BedTool.from_dataframe(gff_df_merged[[
-                                                                       "seqID", 
-                                                                       "start", 
-                                                                       "end", 
-                                                                       "compartment", 
-                                                                       "biotype", 
+                                                                       "seqID",
+                                                                       "start",
+                                                                       "end",
+                                                                       "compartment",
+                                                                       "biotype",
                                                                        "overlapCount"
                                                                        ]]
                                                         )\
@@ -247,7 +247,7 @@ rule extractCoverage:
                                     )
 
                 coverage_df.loc[:, params.split_category] = split_value
-                
+
                 coverage_df.loc[:, "compartment"] = coverage_df["compartment"].replace("region", "Genome")
                 coverage_df.loc[:, "totalCoverage"] = 1e6 * coverage_df["bpCovering"].div(coverage_df["compartmentLength"])
                 coverage_df.loc[:, "overlapping"] = 1e2 * coverage_df["atLeastOne"].div(coverage_df["totalCompartments"])
@@ -255,7 +255,7 @@ rule extractCoverage:
                 round_cols = ["averageCoverage", "medianCoverage", "minCoverage", "maxCoverage", "totalCoverage", "overlapping"]
                 coverage_df[round_cols] = coverage_df[round_cols].round(3)
                 coverage_table.append(coverage_df)
-        
+
 
         coverage_columns = [
                           "#assembly_accession",
@@ -279,7 +279,7 @@ rule extractCoverage:
             coverage_table = coverage_table[coverage_columns]
         else:
             coverage_table = pd.DataFrame([], columns=coverage_columns)
-        
+
         pybedtools.helpers.cleanup(remove_all=False)
         coverage_table.set_index("#assembly_accession", inplace=True)
         coverage_table.to_csv(output[0], sep="\t", index=True, mode="w")
@@ -287,7 +287,7 @@ rule extractCoverage:
 
 rule mergeCoverage:
     input:
-        expand('%s/%s/coverage/coverage_compartments_bucket_{bucket}.%s.coverage' % (out, mode, mode), 
+        expand('%s/%s/coverage/coverage_compartments_bucket_{bucket}.%s.coverage' % (out, mode, mode),
                bucket=range(TOTAL_BUCKETS))
     output:
         '%s/%s/coverage/coverage_compartments.%s.parquet' % (out, mode, mode)

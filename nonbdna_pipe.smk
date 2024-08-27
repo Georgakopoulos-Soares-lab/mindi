@@ -95,8 +95,8 @@ rule extractRepeats:
         destination_dir = params.out.joinpath(f"{mode}_extracted_accessions")
         destination_dir.mkdir(exist_ok=True)
 
-        
-        
+
+
         bucket = load_bucket(wildcards.bucket)
 
         tempdir = Path(params.out).joinpath(f"{mode}_temp")
@@ -108,9 +108,9 @@ rule extractRepeats:
         def _extract_right_hand(left_arm: str, mode: str) -> str:
             if mode == 'IR':
                 return ''.join({
-                                'a': 't', 
-                                't': 'a', 
-                                'g': 'c', 
+                                'a': 't',
+                                't': 'a',
+                                'g': 'c',
                                 'c': 'g'
                                 }[n] for n in left_arm)[::-1]
             elif mode == 'DR':
@@ -126,7 +126,7 @@ rule extractRepeats:
 
             if mode == 'IR':
                 _ = mindi.extract_inverted(
-                          accession, 
+                          accession,
                           minrep=params.minrep,
                           min_arm_length=params.min_arm_length,
                           max_spacer_length=params.max_spacer_length
@@ -140,10 +140,10 @@ rule extractRepeats:
                         )
             elif mode == 'DR':
                 raise NotImplementedYet('Direct Repeats extraction is not currently supported')
-            
+
 
             repeat_df = mindi.to_dataframe()
-            
+
             # accession_id_extracted = extract_id(mindi.fnp)
             # accession_id = extract_id(accession)
             # assert accession_id_extracted == accession_id
@@ -175,7 +175,7 @@ rule extractRepeats:
                     spacer_len = len(spacer_seq)
 
                     section = sequence[start: end]
-                    
+
                     right_hand_side = _extract_right_hand(arm_seq, mode)
                     assert section == derived_seq == arm_seq + spacer_seq + right_hand_side, f"{accession} on {seqID} - start-end: {start}-{end}."
                     assert arm_len * 2 + spacer_len == len(section) == len(derived_seq) == arm_true_len * 2 + spacer_true_len == seq_true_len, f"{accession} on {seqID} - start-end: {start}-{end}."
@@ -216,7 +216,7 @@ rule reduceRepeats:
 
             df.loc[:, "#assembly_accession"] = accession_id
             df_all.append(df)
-        
+
         with open(f"{params.out}/{mode}_completed/empty_accessions.{mode}.txt", mode="w", encoding="UTF-8") as f:
             for accession in empty_assemblies:
                 f.write(str(accession) + "\n")
