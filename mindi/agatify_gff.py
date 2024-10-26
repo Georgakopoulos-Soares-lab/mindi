@@ -24,7 +24,6 @@ def agatify(gff_files: list[str], destination: os.PathLike[str]) -> None:
         if destination_file.is_file():
             print(f"Destination file '{destination_file}' already exists!")
             os.remove(destination_file)
-
             # raise ValueError(f"File {destination_file} already exists!")
 
         tempdir = tempfile.TemporaryDirectory(prefix=extract_name(file) + ".")

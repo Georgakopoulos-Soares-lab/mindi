@@ -1,0 +1,16 @@
+termcolor
+argparse
+pathlib
+python-dotenv
+biopython
+pybedtools
+numpy
+scipy
+pandas
+pyarrow
+matplotlib
+seaborn
+
+# for application
+plotly
+streamlit

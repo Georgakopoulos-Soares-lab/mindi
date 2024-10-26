@@ -16,9 +16,7 @@ class ProgressTracker:
                        bucket_id: Optional[int] = None) -> None:
         self.log_filename = Path(filename).resolve()
         self.log_filename.parent.mkdir(exist_ok=True)
-
         self.bucket_id = bucket_id
-
         self.sleeping_time = sleeping_time
 
         self.counter = 0
@@ -51,7 +49,6 @@ def parse_fasta(accession: os.PathLike[str]) -> tuple[str]:
         
     for record in SeqIO.parse(file, 'fasta'):
         yield str(record.id), str(record.seq).lower()
-
     file.close()
 
 def load_bucket(bucket_id: int, schedule_path: os.PathLike[str]) -> list[str]:
