@@ -85,12 +85,12 @@ class WindowMaker:
                         )
                     )
             df = pd.concat([positive_df, negative_df], axis=0)
-            df["chromosomeSize"] = df["seqID"].apply(lambda seqID: genome_stats.get(seqID, np.nan))
-            if df['chromosomeSize'].isna().sum() > 0:
-                logging.warning(f"Provided chromosome sizes are incomplete. Some chromosome were not mapped to genome sizes.")
-            df["chromosomeSize"] = df["chromosomeSize"].fillna(float('inf'))
+        df["chromosomeSize"] = df["seqID"].apply(lambda seqID: genome_stats.get(seqID, np.nan))
+        if df['chromosomeSize'].isna().sum() > 0:
+            logging.warning(f"Provided chromosome sizes are incomplete. Some chromosome were not mapped to genome sizes.")
+        df["chromosomeSize"] = df["chromosomeSize"].fillna(float('inf'))
+        df.sort_index(ascending=True, inplace=True)
 
-            df.sort_index(ascending=True, inplace=True)
         def _make_windows(df: pd.DataFrame, loci: str) -> pd.DataFrame:
             if loci != "start" and loci != "end" and loci != "mid":
                 raise ValueError(f"Unknown loci {loci}.")
