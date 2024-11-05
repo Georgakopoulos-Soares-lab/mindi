@@ -144,7 +144,7 @@ class PWMExtractor:
 
                 if compartment_strand == "-":
                     temp_counts = temp_counts[::-1]
-                relative_df.append(temp_counts)
+                relative_df.append(list(temp_counts))
         relative_df = pd.DataFrame(relative_df, 
                                    columns=range(-window_size, window_size+1))
         total_sum = relative_df.sum()
