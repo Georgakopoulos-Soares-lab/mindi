@@ -147,7 +147,7 @@ class PWMExtractor:
                 relative_df.append(list(temp_counts))
         relative_df = pd.DataFrame(relative_df, 
                                    columns=range(-window_size, window_size+1))
-        total_sum = relative_df.sum()
+        total_sum = float(relative_df.values.sum())
         assert total_overlap == total_sum, f"Overlap: {total_overlap} vs. Calculated overlap {total_sum}."
         return relative_df
 
