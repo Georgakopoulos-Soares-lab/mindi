@@ -5,6 +5,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import logging
+from pybedtools.featurefuncs import midpoint
+
+def create_windows(df: pd.DataFrame):
+    # TODO
+    pass
 
 @dataclass
 class WindowMaker:
@@ -62,7 +67,7 @@ class WindowMaker:
         expanded_df_negative = _make_windows(df.query("strand == '-'"), loci="start" if loci == "end" else "end")
         df = pd.concat([expanded_df_positive, expanded_df_negative], axis=0)
         df.sort_index(ascending=True, inplace=True)
-        return df
+        return df.drop(columns=['chromosomeSize'])
 
     def make_windows(self, df: pd.DataFrame, loci: str, genome: Optional[os.PathLike[str]] = None) -> pd.DataFrame:
         """"""
@@ -110,5 +115,7 @@ class WindowMaker:
                 df["end"] = np.minimum(df["chromosomeSize"], df["start"] + self.window_size + 1)
                 df["start"] = np.maximum(df["start"] - self.window_size, 0)
             columns = [col for col in df.columns if col != "start" and col != "end" and col != "seqID"]
+            df["start"] = df["start"].astype(int)
+            df["end"] = df["end"].astype(int)
             return df[["seqID", "start", "end"] + columns]
-        return _make_windows(df=df, loci=loci)
+        return _make_windows(df=df, loci=loci).drop(columns=["chromosomeSize"])
