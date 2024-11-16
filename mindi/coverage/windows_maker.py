@@ -33,6 +33,7 @@ class WindowMaker:
 
     def make_half_windows(self, df: pd.DataFrame, loci: str, genome: Optional[os.PathLike[str]] = None) -> pd.DataFrame:
         """"""
+        df = df.copy()
         if genome is None:
             logging.warning(f"User did not provide genome input. Some windows make be over the respective chromosome size.")
             genome_stats = {}
