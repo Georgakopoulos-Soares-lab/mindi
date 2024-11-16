@@ -78,6 +78,8 @@ class WindowMaker:
         else:
             genome_stats = WindowMaker.read_genome(genome)
 
+        df = df.copy()
+
         if self.base == 1:
             df["start"] = df["start"] - 1
             df["end"] = df["end"] - 1
