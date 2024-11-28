@@ -52,9 +52,9 @@ def extract_coverage(extraction_file: str | os.PathLike[str],
                                      add_exons=False, 
                                      merge_compartments=merge_compartments,
                                      is_merged=is_merged,
-                                     partition_on_biotype=partition_on_biotype)
+                                     partition_on_biotype=partition_on_biotype
+                                     )
     coverage_table = []
-
     if gff_df_merged.shape[0] == 0:
         print(f"Accession {accession} was found without any relevant genomic compartments. Skipping...")
         coverage_table = pd.DataFrame([], columns=coverage_columns)

@@ -11,10 +11,12 @@ from pybedtools import BedTool
 from pathlib import Path
 import subprocess
 from typing import Optional, ClassVar
+from functools import lru_cache
 import pandas as pd
 from typing import Union
 
 class GFFCleaner:
+
     GFF_FIELDS: ClassVar[list[str]] = [
                                        "seqID",
                                        "source",
@@ -26,6 +28,7 @@ class GFFCleaner:
                                        "phase",
                                        "attributes"
                                 ]
+
     def __init__(self, tempdir: Optional[str | os.PathLike[str]] = None,
                  all_compartments: Optional[list[tuple[str, Optional[str]]]] = None,
                  bedtools_path: Optional[str | os.PathLike[str]] = None,
@@ -111,7 +114,8 @@ class GFFCleaner:
         else:
             gff_df = gff_df[gff_df['compartment'].isin(self.valid_compartments)]
         return gff_df.reset_index(drop=True)
-
+    
+    @lru_cache(maxsize=1)
     def read(self, gff: Union[os.PathLike[str], str],
                     add_exons: bool = True,
                     merge_compartments: bool = True,
@@ -161,16 +165,16 @@ class GFFCleaner:
                 gff_df = self.read_gff(gff)
                 gff_df.loc[:, "start"] = gff_df["start"] - 1
                 gff_df.loc[:, "biotype"] = gff_df["attributes"].apply(GFFCleaner.parse_biotype)
+                if partition_on_biotype:
+                    gff_df.loc[:, "biotype"] = gff_df["biotype"].apply(GFFCleaner.partition_on_biotype)
+                if merge_compartments:
+                    gff_df = self.merge_compartments(gff_df)
                 gff_df.loc[:, "compartment"] = ( 
                                                 gff_df["compartment"]
                                                 .replace("region", "Genome")
                                                 .replace("gene", "Gene")
                                                 .replace("exon", "Exon")
                                             )
-                if partition_on_biotype:
-                    gff_df.loc[:, "biotype"] = gff_df["biotype"].apply(GFFCleaner.partition_on_biotype)
-                if merge_compartments:
-                    gff_df = self.merge_compartments(gff_df)
         pybedtools.helpers.cleanup(verbose=False, remove_all=False)
         return gff_df
 

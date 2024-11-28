@@ -41,6 +41,7 @@ def extract_density(extraction: str,
                     window_size: int,
                     density_type: str = "density",
                     determine_strand: Optional[Callable[[str], str]] = None,
+                    genome: Optional[str] = None,
                     ) -> Iterator[Density]:
     global FIELDS
     maker = WindowMaker(base=1)
@@ -51,8 +52,8 @@ def extract_density(extraction: str,
                                         )
                             )
     gff_df = cleaner.read_gff(gff_file)[["seqID", "start", "end", "strand"]]
-    gff_tss = maker.make_windows(gff_df, loci="start")
-    gff_tes = maker.make_windows(gff_df, loci="end")
+    gff_tss = maker.make_windows(gff_df, loci="start", genome=genome)
+    gff_tes = maker.make_windows(gff_df, loci="end", genome=genome)
     gff_tss_bed = BedTool.from_dataframe(gff_tss)
     gff_tes_bed = BedTool.from_dataframe(gff_tes)
     intersect_df_tss = pd.read_table(
@@ -85,7 +86,6 @@ def extract_density(extraction: str,
         if isinstance(density, dict):
             for key, value in density.items():
                 yield Density(density=value, loci=loci, category=key)
-
         else:
             yield Density(density=density, loci=loci)
 
@@ -115,4 +115,3 @@ if __name__ == "__main__":
                               determine_strand=determine_strand,
                               ):
         densities.update({(eDensity.loci, eDensity.category): eDensity.density}) 
-    breakpoint()
