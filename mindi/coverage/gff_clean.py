@@ -233,13 +233,13 @@ class GFFCleaner:
                                right_on="compartment_id",
                                how="left",
                                suffixes=("", "_isoform"),
-                               )\
-                        .sort_values(by=["seqID", "start"], ascending=True)\
-                        .reset_index(drop=True)
+                               )
+                        # .sort_values(by=["seqID", "start"], ascending=True)\
+                        # .reset_index(drop=True)
         if exons_df['start_isoform'].isna().sum() > 0:
             raise ValueError()
         updated_gff = []
-        for group_id, group in exons_df.groupby(["seqID", "parent_id"], as_index=False):
+        for group_id, group in exons_df.groupby(["seqID", "parent_id"], as_index=False, sort=False):
             columns = group.columns.tolist()
             group = [{col: val for col, val in zip(columns, subgroup)} for subgroup in group.values]
             group = sorted(group, key=lambda x: x["start"], reverse=False)
