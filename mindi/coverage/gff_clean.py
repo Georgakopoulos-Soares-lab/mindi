@@ -318,6 +318,8 @@ class GFFCleaner:
                     intron_end = isoform_end
                     if isoform_end > exon_end:
                         inserted_introns += 1
+                        if isinstance(intron_attributes, str):
+                            intron_attributes = GFFCleaner.parse_attributes(intron_attributes)
                         intron_attributes.update({"number": inserted_introns})
                         intron_attributes = GFFCleaner.marshal(intron_attributes)
                         processed_compartments.append({
