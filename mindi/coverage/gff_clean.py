@@ -129,6 +129,7 @@ class GFFCleaner:
                  parse_ids: bool = False,
                  parse_parent: bool = False,
                  parse_name: bool = False,
+                 sort: bool = False,
                  post_filter: Optional[list[str]] = None,
                  ) -> pd.DataFrame:
         gff_df = pd.read_table(
@@ -170,6 +171,10 @@ class GFFCleaner:
         if isinstance(post_filter, list):
             post_filter = set(post_filter)
             gff_df = gff_df[gff_df["compartment"].isin(post_filter)]
+
+        if sort:
+            gff_df = gff_df.sort_values(by=["seqID", "start"], ascending=True)\
+                           .reset_index(drop=True)
         return gff_df.reset_index(drop=True)
 
 
@@ -209,7 +214,8 @@ class GFFCleaner:
                                biotype=True,
                                parse_name=False,
                                parse_ids=True, 
-                               parse_parent=True
+                               parse_parent=True,
+                               sort=True
                                )
         # remove introns if they already exist
         gff_df = gff_df[gff_df["compartment"] != "intron"]
