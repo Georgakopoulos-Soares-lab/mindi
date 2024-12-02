@@ -260,6 +260,7 @@ class GFFCleaner:
             def _process_isoform(group) -> list[dict]:
                 processed_compartments = []
                 inserted_introns = 0
+                assert len(group) > 0
                 for i in range(len(group)):
                     exon = group[i]
                     exon_start = exon["start"]
@@ -268,8 +269,8 @@ class GFFCleaner:
                     score = exon["score"]
                     phase = exon["phase"]
                     strand = exon["strand"]
-                    intron_attributes = exon_attributes.replace("Exon", "Intron-MINDI")\
-                                                       .replace("exon", "intron-MINDI")
+                    intron_attributes = exon_attributes.replace("Exon", "MINDI:intron")\
+                                                       .replace("exon", "MINDI:intron")
                     intron_attributes = GFFCleaner.parse_attributes(intron_attributes)
                     if i == 0 and isoform_start < exon_start:
                         intron_start = isoform_start
@@ -313,28 +314,28 @@ class GFFCleaner:
                                               "strand": strand,
                                               "attributes": exon_attributes,
                                               })
-                    # > final
-                    intron_start = exon_end + 1
-                    intron_end = isoform_end
-                    if isoform_end > exon_end:
-                        inserted_introns += 1
-                        if isinstance(intron_attributes, str):
-                            intron_attributes = GFFCleaner.parse_attributes(intron_attributes)
-                        intron_attributes.update({"number": inserted_introns})
-                        intron_attributes = GFFCleaner.marshal(intron_attributes)
-                        processed_compartments.append({
-                                          "seqID": current_seqID,
-                                          "compartment": "intron",
-                                          "start": intron_start,
-                                          "end": intron_end,
-                                          "score": score,
-                                          "phase": phase,
-                                          "strand": strand,
-                                          "attributes": intron_attributes,
-                                          })
+                # > final
+                intron_start = exon_end + 1
+                intron_end = isoform_end
+                if isoform_end > exon_end:
+                    inserted_introns += 1
+                    if isinstance(intron_attributes, str):
+                        intron_attributes = GFFCleaner.parse_attributes(intron_attributes)
+                    intron_attributes.update({"number": inserted_introns})
+                    intron_attributes = GFFCleaner.marshal(intron_attributes)
+                    processed_compartments.append({
+                                      "seqID": current_seqID,
+                                      "compartment": "intron",
+                                      "start": intron_start,
+                                      "end": intron_end,
+                                      "score": score,
+                                      "phase": phase,
+                                      "strand": strand,
+                                      "attributes": intron_attributes,
+                                      })
+
                 return processed_compartments
             updated_gff.extend(_process_isoform(group))
-            breakpoint()
         updated_gff = pd.DataFrame(updated_gff)
 
         if return_bed:
