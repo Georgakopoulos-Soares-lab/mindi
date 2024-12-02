@@ -211,33 +211,30 @@ class GFFCleaner:
         gff_df = self.read_gff(gff, 
                                filter_compartments=False, 
                                change_names=False,
-                               biotype=True,
+                               biotype=False,
                                parse_name=False,
                                parse_ids=True, 
                                parse_parent=True,
                                sort=False
                                )
         # remove introns if they already exist
-        gff_df = gff_df[gff_df["compartment"] != "intron"]
+        gff_df = gff_df[(gff_df["compartment"] != "intron") & (gff_df["compartment"] != "Intron")]
         # add to everything their parent except exons
-        parent_df = gff_df.query("compartment != 'exon'").merge(
-                                    gff_df,
-                                    left_on="parent_id",
-                                    right_on="compartment_id",
-                                    how="left",
-                                    suffixes=("", "_parent")
-                                    )
-        exons_df = gff_df.query("compartment == 'exon'")
-        exons_df = exons_df.merge(parent_df,
-                               left_on="parent_id", 
-                               right_on="compartment_id",
-                               how="left",
-                               suffixes=("", "_isoform"),
+        parent_df = gff_df.query("compartment != 'exon' & compartment != 'Exon'")\
+                          .drop(columns=["source", "score", "strand", "phase"])
+
+        exons_df = gff_df.query("compartment == 'exon' | compartment == 'Exon'")\
+                         .merge(parent_df,
+                                left_on=["seqID", "parent_id"], 
+                                right_on=["seqID", "compartment_id"],
+                                how="left",
+                                suffixes=("", "_isoform"),
                                )
                         # .sort_values(by=["seqID", "start"], ascending=True)\
                         # .reset_index(drop=True)
-        if exons_df['start_isoform'].isna().sum() > 0:
-            raise ValueError()
+        # if exons_df['start_isoform'].isna().sum() > 0:
+        #   raise ValueError()
+        exons_df = exons_df.dropna(subset=['start_isoform'])
         updated_gff = []
         for group_id, group in exons_df.groupby(["seqID", "parent_id"], as_index=False, sort=False):
             columns = group.columns.tolist()
@@ -269,6 +266,7 @@ class GFFCleaner:
                 processed_compartments = []
                 inserted_introns = 0
                 assert len(group) > 0
+                intron_start, intron_end = None, None
                 for i in range(len(group)):
                     exon = group[i]
                     exon_start = exon["start"]
@@ -292,24 +290,24 @@ class GFFCleaner:
                                               "start": intron_start,
                                               "end": intron_end,
                                               "score": score,
-                                              "phase": phase,
                                               "strand": strand,
+                                              "phase": phase,
                                               "attributes": intron_attributes,
                                               })
-                    elif i > 0:
+                    elif i > 0 and group[i-1]["end"] < exon_start:
                         inserted_introns += 1
                         intron_attributes.update({"number": inserted_introns})
                         intron_attributes = GFFCleaner.marshal(intron_attributes)
-                        intron_start = group[i-1]["end"] + 1
-                        intron_end = group[i]["start"] - 1
+                        intron_start = group[i-1]["end"]
+                        intron_end = exon_start - 1
                         processed_compartments.append({
                                               "seqID": current_seqID,
                                               "compartment": "intron",
                                               "start": intron_start,
                                               "end": intron_end,
                                               "score": score,
-                                              "phase": phase,
                                               "strand": strand,
+                                              "phase": phase,
                                               "attributes": intron_attributes,
                                               })
                     processed_compartments.append({
@@ -318,14 +316,14 @@ class GFFCleaner:
                                               "start": exon_start,
                                               "end": exon_end,
                                               "score": score,
-                                              "phase": phase,
                                               "strand": strand,
+                                              "phase": phase,
                                               "attributes": exon_attributes,
                                               })
                 # > final
-                intron_start = exon_end + 1
-                intron_end = isoform_end
                 if isoform_end > exon_end:
+                    intron_start = exon_end
+                    intron_end = isoform_end
                     inserted_introns += 1
                     if isinstance(intron_attributes, str):
                         intron_attributes = GFFCleaner.parse_attributes(intron_attributes)
@@ -337,15 +335,15 @@ class GFFCleaner:
                                       "start": intron_start,
                                       "end": intron_end,
                                       "score": score,
-                                      "phase": phase,
                                       "strand": strand,
+                                      "phase": phase,
                                       "attributes": intron_attributes,
                                       })
 
                 return processed_compartments
             updated_gff.extend(_process_isoform(group))
         updated_gff = pd.DataFrame(updated_gff)
-
+        BedTool.from_dataframe(updated_gff[["seqID", "start", "end"]]).sort().merge()
         if return_bed:
             updated_gff = BedTool.from_dataframe(updated_gff).sort()
             return updated_gff 
