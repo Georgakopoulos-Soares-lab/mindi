@@ -215,7 +215,7 @@ class GFFCleaner:
                                parse_name=False,
                                parse_ids=True, 
                                parse_parent=True,
-                               sort=True
+                               sort=False
                                )
         # remove introns if they already exist
         gff_df = gff_df[gff_df["compartment"] != "intron"]
@@ -233,7 +233,9 @@ class GFFCleaner:
                                right_on="compartment_id",
                                how="left",
                                suffixes=("", "_isoform"),
-                               )
+                               )\
+                        .sort_values(by=["seqID", "start"], ascending=True)\
+                        .reset_index(drop=True)
         if exons_df['start_isoform'].isna().sum() > 0:
             raise ValueError()
         updated_gff = []
