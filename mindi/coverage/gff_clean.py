@@ -11,10 +11,12 @@ from pybedtools import BedTool
 from pathlib import Path
 import subprocess
 from typing import Optional, ClassVar
+from functools import lru_cache
 import pandas as pd
 from typing import Union
 
 class GFFCleaner:
+
     GFF_FIELDS: ClassVar[list[str]] = [
                                        "seqID",
                                        "source",
@@ -26,6 +28,7 @@ class GFFCleaner:
                                        "phase",
                                        "attributes"
                                 ]
+
     def __init__(self, tempdir: Optional[str | os.PathLike[str]] = None,
                  all_compartments: Optional[list[tuple[str, Optional[str]]]] = None,
                  bedtools_path: Optional[str | os.PathLike[str]] = None,
@@ -66,6 +69,7 @@ class GFFCleaner:
         self.all_compartments = all_compartments
 
     @staticmethod
+    @lru_cache(maxsize=1)
     def parse_attributes(attributes: str) -> dict[str, str] | str:
         attributes = attributes.strip()
         if "=" not in attributes:
@@ -77,14 +81,38 @@ class GFFCleaner:
             parsed_attributes.update({name: value})
         return parsed_attributes
 
+    @staticmethod 
+    def marshal(attributes: dict) -> str:
+        return ";".join(f"{key}={value}" for key, value in attributes.items())
+
+
     @staticmethod
-    def parse_biotype(attributes: str) -> str:
-        if "gene_biotype=" not in attributes:
-            return "."
-        biotype = attributes.split("gene_biotype=")[1]
-        if ";" in biotype:
-            return biotype.split(";")[0]
-        return biotype
+    def parse_biotype(attributes: str) -> Optional[str]:
+        parsed_attributes = GFFCleaner.parse_attributes(attributes)
+        if isinstance(parsed_attributes, dict): 
+            return parsed_attributes.get("gene_biotype", parsed_attributes.get("biotype", "."))
+        return
+
+    @staticmethod
+    def parse_id(attributes: str) -> Optional[str]:
+        parsed_attributes = GFFCleaner.parse_attributes(attributes)
+        if isinstance(parsed_attributes, dict):
+            return parsed_attributes.get("ID", ".")
+        return
+
+    @staticmethod
+    def parse_parent(attributes: str) -> Optional[str]:
+        parsed_attributes = GFFCleaner.parse_attributes(attributes)
+        if isinstance(parsed_attributes, dict):
+            return parsed_attributes.get("Parent", ".")
+        return
+
+    @staticmethod
+    def parse_name(attributes: str) -> Optional[str]:
+        parsed_attributes = GFFCleaner.parse_attributes(attributes)
+        if isinstance(parsed_attributes, dict):
+            return parsed_attributes.get("Name", ".")
+        return
 
     @staticmethod
     def partition_on_biotype(biotype: str) -> str:
@@ -94,7 +122,15 @@ class GFFCleaner:
             return "non_coding"
         return "."
 
-    def read_gff(self, gff: os.PathLike[str]) -> pd.DataFrame:
+    def read_gff(self, gff: os.PathLike[str], 
+                 filter_compartments: bool = False,
+                 change_names: bool = True,
+                 biotype: bool = True,
+                 parse_ids: bool = False,
+                 parse_parent: bool = False,
+                 parse_name: bool = False,
+                 post_filter: Optional[list[str]] = None,
+                 ) -> pd.DataFrame:
         gff_df = pd.read_table(
                             gff,
                             comment="#",
@@ -105,13 +141,207 @@ class GFFCleaner:
                                 "end": int
                             }
                     )
-        if len(self.valid_compartments) == 1:
-            compartment = list(self.valid_compartments)[0]
-            gff_df = gff_df[gff_df["compartment"] == compartment]
-        else:
-            gff_df = gff_df[gff_df['compartment'].isin(self.valid_compartments)]
+        if filter_compartments:
+            if len(self.valid_compartments) == 1:
+                compartment = list(self.valid_compartments)[0]
+                gff_df = gff_df[gff_df["compartment"] == compartment]
+            else:
+                gff_df = gff_df[gff_df['compartment'].isin(self.valid_compartments)]
+        # 1-base -> 0-base transformation
+        gff_df.loc[:, "start"] = gff_df["start"] - 1
+        if biotype:
+            gff_df.loc[:, "biotype"] = gff_df["attributes"].apply(GFFCleaner.parse_biotype)
+        if parse_ids:
+            gff_df.loc[:, "compartment_id"] = gff_df["attributes"].apply(GFFCleaner.parse_id)
+        if parse_parent:
+            gff_df.loc[:, "parent_id"] = gff_df["attributes"].apply(GFFCleaner.parse_parent)
+        if parse_name:
+            gff_df.loc[:, "name"] = gff_df["attributes"].apply(GFFCleaner.parse_name)
+        # replace names
+        if change_names:
+            gff_df.loc[:, "compartment"] = ( 
+                                        gff_df["compartment"]
+                                        .replace("region", "Genome")
+                                        .replace("gene", "Gene")
+                                        .replace("pseudogene", "Pseudogene")
+                                        .replace("exon", "Exon")
+                                    )
+
+        if isinstance(post_filter, list):
+            post_filter = set(post_filter)
+            gff_df = gff_df[gff_df["compartment"].isin(post_filter)]
         return gff_df.reset_index(drop=True)
 
+
+     #def add_exons(self, gff: os.PathLike[str], return_bed: bool = False):
+     #   gff_df = self.read_gff(gff, 
+     #                          filter_compartments=False, 
+     #                          change_names=False,
+     #                          biotype=False,
+     #                          parse_name=False,
+     #                          parse_ids=True, 
+     #                          parse_parent=True
+     #                          )
+     #   # add to everything their parent except CDS
+     #   parent_df = gff_df.query("compartment != 'CDS'").merge(
+     #                               gff_df,
+     #                               left_on="parent_id",
+     #                               right_on="compartment_id",
+     #                               how="left",
+     #                               suffixes=("", "_parent")
+     #                               )
+     #   CDS_df = gff_df.query("compartment == 'CDS'")
+     #   CDS_df = CDS_df.merge(parent_df,
+     #                          left_on="parent_id", 
+     #                          right_on="compartment_id",
+     #                          how="left",
+     #                          suffixes=("", "_isoform"),
+     #                          )
+     #   if CDS_df['start_isoform'].isna().sum() > 0:
+     #       raise ValueError()
+     #   updated_gff = []
+     #
+
+    def add_introns(self, gff: os.PathLike[str], return_bed: bool = False) -> pd.DataFrame:
+        gff_df = self.read_gff(gff, 
+                               filter_compartments=False, 
+                               change_names=False,
+                               biotype=True,
+                               parse_name=False,
+                               parse_ids=True, 
+                               parse_parent=True
+                               )
+        # remove introns if they already exist
+        gff_df = gff_df[gff_df["compartment"] != "intron"]
+        # add to everything their parent except exons
+        parent_df = gff_df.query("compartment != 'exon'").merge(
+                                    gff_df,
+                                    left_on="parent_id",
+                                    right_on="compartment_id",
+                                    how="left",
+                                    suffixes=("", "_parent")
+                                    )
+        exons_df = gff_df.query("compartment == 'exon'")
+        exons_df = exons_df.merge(parent_df,
+                               left_on="parent_id", 
+                               right_on="compartment_id",
+                               how="left",
+                               suffixes=("", "_isoform"),
+                               )
+        if exons_df['start_isoform'].isna().sum() > 0:
+            raise ValueError()
+        updated_gff = []
+        for group_id, group in exons_df.groupby(["seqID", "parent_id"], as_index=False):
+            columns = group.columns.tolist()
+            group = [{col: val for col, val in zip(columns, subgroup)} for subgroup in group.values]
+            group = sorted(group, key=lambda x: x["start"], reverse=False)
+            first_exon = group[0]
+            current_seqID = first_exon["seqID"]
+            isoform_type = first_exon["compartment_isoform"]
+            isoform_start = first_exon["start_isoform"]
+            isoform_end = first_exon["end_isoform"]
+            isoform_attributes = first_exon["attributes_isoform"]
+            isoform_strand = first_exon["strand"]
+            isoform_phase = first_exon["phase"]
+            isoform_score = first_exon["score"]
+            isoform_parent = first_exon["parent_id"]
+
+            if isoform_parent != ".":
+                pass
+            updated_gff.append({"seqID": current_seqID,
+                                  "compartment": isoform_type,
+                                  "start": isoform_start,
+                                  "end": isoform_end,
+                                  "score": isoform_score,
+                                  "phase": isoform_phase,
+                                  "strand": isoform_strand,
+                                  "attributes": isoform_attributes,
+                                  })
+            def _process_isoform(group) -> list[dict]:
+                processed_compartments = []
+                inserted_introns = 0
+                for i in range(len(group)):
+                    exon = group[i]
+                    exon_start = exon["start"]
+                    exon_end = exon["end"]
+                    exon_attributes = exon["attributes"]
+                    score = exon["score"]
+                    phase = exon["phase"]
+                    strand = exon["strand"]
+                    intron_attributes = exon_attributes.replace("Exon", "Intron-MINDI")\
+                                                       .replace("exon", "intron-MINDI")
+                    intron_attributes = GFFCleaner.parse_attributes(intron_attributes)
+                    if i == 0 and isoform_start < exon_start:
+                        intron_start = isoform_start
+                        intron_end = exon_start - 1
+                        inserted_introns += 1
+                        intron_attributes.update({"number": inserted_introns})
+                        intron_attributes = GFFCleaner.marshal(intron_attributes)
+                        processed_compartments.append({
+                                              "seqID": current_seqID,
+                                              "compartment": "intron",
+                                              "start": intron_start,
+                                              "end": intron_end,
+                                              "score": score,
+                                              "phase": phase,
+                                              "strand": strand,
+                                              "attributes": intron_attributes,
+                                              })
+                    elif i > 0:
+                        inserted_introns += 1
+                        intron_attributes.update({"number": inserted_introns})
+                        intron_attributes = GFFCleaner.marshal(intron_attributes)
+                        intron_start = group[i-1]["end"] + 1
+                        intron_end = group[i]["start"] - 1
+                        processed_compartments.append({
+                                              "seqID": current_seqID,
+                                              "compartment": "intron",
+                                              "start": intron_start,
+                                              "end": intron_end,
+                                              "score": score,
+                                              "phase": phase,
+                                              "strand": strand,
+                                              "attributes": intron_attributes,
+                                              })
+                    processed_compartments.append({
+                                              "seqID": current_seqID,
+                                              "compartment": "exon",
+                                              "start": exon_start,
+                                              "end": exon_end,
+                                              "score": score,
+                                              "phase": phase,
+                                              "strand": strand,
+                                              "attributes": exon_attributes,
+                                              })
+                    # > final
+                    intron_start = exon_end + 1
+                    intron_end = isoform_end
+                    if isoform_end > exon_end:
+                        inserted_introns += 1
+                        intron_attributes.update({"number": inserted_introns})
+                        intron_attributes = GFFCleaner.marshal(intron_attributes)
+                        processed_compartments.append({
+                                          "seqID": current_seqID,
+                                          "compartment": "intron",
+                                          "start": intron_start,
+                                          "end": intron_end,
+                                          "score": score,
+                                          "phase": phase,
+                                          "strand": strand,
+                                          "attributes": intron_attributes,
+                                          })
+                return processed_compartments
+            updated_gff.extend(_process_isoform(group))
+            breakpoint()
+        updated_gff = pd.DataFrame(updated_gff)
+
+        if return_bed:
+            updated_gff = BedTool.from_dataframe(updated_gff).sort()
+            return updated_gff 
+        return updated_gff
+
+    
+    @lru_cache(maxsize=1)
     def read(self, gff: Union[os.PathLike[str], str],
                     add_exons: bool = True,
                     merge_compartments: bool = True,
@@ -158,19 +388,10 @@ class GFFCleaner:
             if is_merged:
                 gff_df = pd.read_table(gff)
             else:
-                gff_df = self.read_gff(gff)
-                gff_df.loc[:, "start"] = gff_df["start"] - 1
-                gff_df.loc[:, "biotype"] = gff_df["attributes"].apply(GFFCleaner.parse_biotype)
-                gff_df.loc[:, "compartment"] = ( 
-                                                gff_df["compartment"]
-                                                .replace("region", "Genome")
-                                                .replace("gene", "Gene")
-                                                .replace("exon", "Exon")
-                                            )
-                if partition_on_biotype:
-                    gff_df.loc[:, "biotype"] = gff_df["biotype"].apply(GFFCleaner.partition_on_biotype)
+                gff_df = self.read_gff(gff, biotype=partition_on_biotype)
                 if merge_compartments:
                     gff_df = self.merge_compartments(gff_df)
+
         pybedtools.helpers.cleanup(verbose=False, remove_all=False)
         return gff_df
 
