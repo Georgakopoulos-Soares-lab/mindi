@@ -255,32 +255,37 @@ class PWMExtractor:
         total_counts = np.zeros(2*window_size+1)
         total_overlap = 0
         for _, row in intersect_df.iterrows():
-                compartment_strand = row['strand']
-                if compartment_strand == "?":
-                    continue
-                start = int(row['start'])
-                end = int(row['end'])
-                motif_start = int(row['motif_start'])
-                motif_end = int(row['motif_end'])
+            compartment_strand = row['strand']
+            if compartment_strand == "?":
+                continue
+            start = int(row['start'])
+            end = int(row['end'])
+            # 10 -- 21 -- 31 ] 32 = 2 * w + 10 + 2
+            # if end != window_size * 2 + 2 + start:
+            #    print('woops?')
+            #    end = start + window_size * 2 + 2
+            
+            motif_start = int(row['motif_start'])
+            motif_end = int(row['motif_end'])
 
-                temp_counts = np.zeros(2*window_size+1)
-                overlap = int(row['overlap'])
-                total_overlap += overlap
-                origin = end - window_size - 1
-                L = max(0, window_size - (origin - motif_start))
-                U = min(2 * window_size + 1, window_size - (origin - motif_end))
+            temp_counts = np.zeros(2*window_size+1)
+            overlap = int(row['overlap'])
+            total_overlap += overlap
+            origin = end - window_size - 1
+            L = max(0, window_size - (origin - motif_start))
+            U = min(2 * window_size + 1, window_size - (origin - motif_end))
 
-                assert L <= U
-                overlap_start = max(motif_start, start)
-                overlap_end = min(motif_end, end)
-                overlap_length = overlap_end - overlap_start
-                assert overlap == overlap_length
-                assert overlap == U-L
-                temp_counts[L:U] += 1
+            assert L <= U
+            overlap_start = max(motif_start, start)
+            overlap_end = min(motif_end, end)
+            overlap_length = overlap_end - overlap_start
+            assert overlap == overlap_length, f"{row}-{U}-{L}-{origin}"
+            assert overlap == U-L, f"{row}-{U}-{L}-{origin}"
+            temp_counts[L:U] += 1
 
-                if compartment_strand == "-":
-                    temp_counts = temp_counts[::-1]
-                total_counts += temp_counts
+            if compartment_strand == "-":
+                temp_counts = temp_counts[::-1]
+            total_counts += temp_counts
         total_sum = int(np.sum(total_counts))
         assert total_overlap == total_sum, f"Overlap: {total_overlap} vs. Calculated overlap {total_sum}."
         total_counts = list(total_counts)
