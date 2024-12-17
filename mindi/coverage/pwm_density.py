@@ -14,7 +14,7 @@ class StrandEvaluator:
 class HDNAStrandEvaluator(StrandEvaluator):
     def determine_strand(self, motif: str) -> str:
         ag = motif.count("a") + motif.count("g")
-        ct = len(motif) - ag
+        ct = len(motif) - ag 
         return "+" if ag >= ct else "-"
         
 class GQuadruplexStrandEvaluator(StrandEvaluator):
@@ -61,8 +61,8 @@ class PWMExtractor:
 
     def extract_template_density(self, intersect_df: pd.DataFrame, 
                                         window_size: int, 
-                                        determine_strand: Callable[[str], str],
-                                        ) -> dict[str, list[int]]:
+                                        enrichment: bool = False,
+                                 ) -> pd.DataFrame:
         total_counts = {
                         "template": np.zeros(2*window_size+1),
                         "non_template": np.zeros(2*window_size+1)
@@ -73,11 +73,11 @@ class PWMExtractor:
                 compartment_strand = row['strand']
                 if compartment_strand == "?":
                     continue
-                start = int(row['start'])
-                end = int(row['end'])
-                motif_start = int(row['motif_start'])
-                motif_end = int(row['motif_end'])
-                motif_strand = determine_strand(row['sequence'])
+                start = int(row["start"])
+                end = int(row["end"])
+                motif_start = int(row["motif_start"])
+                motif_end = int(row["motif_end"])
+                motif_strand = row["motif_strand"]
 
                 template = self.determine_template_strand(compartment_strand, motif_strand)
                 temp_counts = np.zeros(2*window_size+1)
@@ -87,7 +87,6 @@ class PWMExtractor:
                 origin = end - window_size - 1
                 L = max(0, window_size - (origin - motif_start))
                 U = min(2 * window_size + 1, window_size - (origin - motif_end))
-
                 assert L <= U
                 overlap_start = max(motif_start, start)
                 overlap_end = min(motif_end, end)
@@ -98,8 +97,27 @@ class PWMExtractor:
                 if compartment_strand == "-":
                     temp_counts = temp_counts[::-1]
                 total_counts[template] += temp_counts
+
+        # honour contract
         assert total_overlap == np.sum(total_counts["template"]) + np.sum(total_counts["non_template"]), f"Overlap: {total_overlap} vs. Calculated overlap {np.sum(total_counts)}."
-        return total_counts
+        if enrichment:
+            name = "Enrichment"
+            for typ in total_counts:
+                total_counts[typ] = total_counts[typ] / np.mean(total_counts[typ])
+        else:
+            name = "Occurrences"
+        
+        for typ in total_counts:
+            total_counts[typ] = pd.Series(total_counts[typ])\
+                                .to_frame(name=name + f"_{typ}")
+            total_counts[typ].index = total_counts[typ].index - window_size 
+            if name != "Enrichment":
+                total_counts[typ] = total_counts[typ].astype(int)
+
+        template_df = pd.concat([total_counts["template"],
+                                 total_counts["non_template"]
+                                 ], axis=1).T
+        return template_df
 
     @staticmethod
     def bayes_estimator(counts: int, total_counts: int, total_bins: int) -> float:
@@ -152,20 +170,21 @@ class PWMExtractor:
         return relative_df
 
     def bootstrap(self, relative_positions: pd.DataFrame, 
-                  iterations: int = 1_000,
-                  lower_quantile: float = 0.05,
-                  upper_quantile: float = 0.975) -> tuple[pd.DataFrame, pd.Series, pd.Series]:
+                  N: int = 1_000,
+                  lower_quantile: float = 0.025,
+                  upper_quantile: float = 0.975) -> tuple[pd.Series, pd.Series, pd.Series]:
         bootstrap_df = []
         total_samples = relative_positions.shape[0]
-        for _ in tqdm(range(iterations), leave=True, position=0):
+        for _ in tqdm(range(N), leave=True, position=0):
             density = relative_positions.sample(total_samples, replace=True)\
                                         .sum(axis=0)
             density /= np.mean(density)
             bootstrap_df.append(density)
         bootstrap_df = pd.DataFrame(bootstrap_df)
+        average = bootstrap_df.mean()
         lower_bound = bootstrap_df.quantile(lower_quantile)
         upper_bound = bootstrap_df.quantile(upper_quantile)
-        return bootstrap_df, lower_bound, upper_bound
+        return average, lower_bound, upper_bound
             
     def plot_density(self, 
                      density, 
@@ -250,8 +269,12 @@ class PWMExtractor:
         ax.tick_params(axis="both", labelsize=13)
         return fig, ax
         
-
-    def extract_density(self, intersect_df: pd.DataFrame, window_size: int) -> list[int]:
+    def extract_density(self, intersect_df: pd.DataFrame, 
+                        window_size: int,
+                        return_array: bool = True,
+                        return_frame: bool = False,
+                        enrichment: bool = False,
+                        ) -> list[int] | np.ndarray:
         total_counts = np.zeros(2*window_size+1)
         total_overlap = 0
         for _, row in intersect_df.iterrows():
@@ -288,12 +311,26 @@ class PWMExtractor:
             total_counts += temp_counts
         total_sum = int(np.sum(total_counts))
         assert total_overlap == total_sum, f"Overlap: {total_overlap} vs. Calculated overlap {total_sum}."
-        total_counts = list(total_counts)
+
+        if enrichment:
+            total_counts = total_counts / np.mean(total_counts)
+            name = "Enrichment"
+        else:
+            name = "Occurrences"
+
+        if return_frame:
+            total_counts = pd.Series(total_counts)\
+                                .to_frame(name=name)
+            total_counts.index = total_counts.index - window_size 
+            total_counts = total_counts.reset_index()
+        elif not return_array:
+            total_counts = list(total_counts)
         return total_counts
 
     def extract_PWM(self, 
                     intersect_df: pd.DataFrame, 
                     window_size: int, 
+                    return_frame: bool = True
                     ) -> dict[str, list[int]]:
         total_counts = {n: [0 for _ in range(2*window_size+1)] for n in self.nucleotides}
         total_overlap = 0

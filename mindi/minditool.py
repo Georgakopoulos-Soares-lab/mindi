@@ -3,6 +3,7 @@ __author__ = "Nikol Chantzi"
 __version__ = "1.0.1"
 __email__ = "nmc6088@psu.edu"
 
+from collections import Counter, defaultdict
 import subprocess
 import pandas as pd
 import csv
@@ -12,7 +13,7 @@ from termcolor import colored
 import re
 from typing import ClassVar, Optional, Iterator
 from dotenv import load_dotenv
-from mindi.tailhunter import hunt_tail
+# from mindi.tailhunter import hunt_tail
 import os
 import gzip
 from mindi.utils import parse_fasta
@@ -98,7 +99,7 @@ class MindiTool:
         self.nonBDNA = nonBDNA
         self.RTRF = RTRF
         self.cur_mode = None
-        self.fn = None
+        self.fn = {}
         self.fnp = None
         if not Path(self.nonBDNA).is_file():
             raise FileNotFoundError(f"Invalid executable path {self.nonBDNA}.")
@@ -111,55 +112,101 @@ class MindiTool:
     def extract_id(accession: str) -> str:
         return '_'.join(Path(accession).name.split("_")[:2])
 
-    def _generate_repeats(self, accession: str,
-                          minrep: int,
-                          maxspacer: int,
-                          mode: str
-                    ) -> None:
-            self.reset()
-            accession = Path(accession).resolve()
-            if not accession.is_file():
-                raise FileNotFoundError(f'Unable to detect accession {accession}.')
-            accession_name = MindiTool.extract_name(accession)
-            accession_id = MindiTool.extract_id(accession)
-            # accession_tmp_dir = self.tempdir.joinpath(accession_name)
-            accession_tmp_dir = tempfile.TemporaryDirectory(prefix=f"{accession_id}.{mode}.")
-            accession_tmp_dir_path = self.tempdir.joinpath(accession_tmp_dir.name)
-            # if accession_tmp_dir.is_dir():
-            #    shutil.rmtree(accession_tmp_dir)
-            cur_dir = os.getcwd()
-            # handle zipped files
-            if accession.name.endswith(".gz"):
-                # gzip compression strategy
-                with tempfile.NamedTemporaryFile(dir=accession_tmp_dir_path,
-                                                 delete=False,
-                                                 suffix='.fna') as unzipped_tmp:
-                    with gzip.open(accession, 'rb') as handler:
-                        unzipped_tmp.write(handler.read())
-                    accession = Path(unzipped_tmp.name).name
-            os.chdir(accession_tmp_dir_path)
-            out_tsv = accession_tmp_dir_path.joinpath(accession_name + f'_{mode}.tsv')
-            out_gff = accession_tmp_dir_path.joinpath(accession_name + f'_{mode}.gff')
-            rand_accession_name = str(uuid.uuid4())
-            match mode:
-                case 'IR':
-                    command = f"{self.nonBDNA} -seq {accession} -out {rand_accession_name} -minIRrep {minrep} -maxIRspacer {maxspacer} -skipAPR -skipSTR -skipMR -skipDR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
-                case 'MR':
-                    command = f"{self.nonBDNA} -seq {accession} -out {rand_accession_name} -minMRrep {minrep} -maxMRspacer {maxspacer} -skipAPR -skipSTR -skipIR -skipDR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
-                case 'DR':
-                    command = f"{self.nonBDNA} -seq {accession} -out {rand_accession_name} -minDRrep {minrep} -maxDRrep {MindiTool.max_DR_rep} -maxDRspacer {maxspacer} -maxMRspacer -skipAPR -skipSTR -skipMR -skipIR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
-                case 'STR':
-                    # TODO
-                    # > Implement RTPRF
-                    command = f"{self.nonBDNA} -seq {accession} -out {rand_accession_name} -skipAPR -skipMR -skipIR -skipDR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
-                case _:
-                    raise ValueError(f'Unknown mode {mode}.')
-            _ = subprocess.run(command, shell=True,
-                                        check=True,
-                                        stdout=subprocess.DEVNULL,
-                                        # stderr=subprocess.DEVNULL,
-                                )
-            # check operation was succesful
+    def _generate_repeats(self, accession: str, pattern: str, **kwargs) -> None:
+        self.reset()
+        accession = Path(accession).resolve()
+        if not accession.is_file():
+            raise FileNotFoundError(f'Unable to detect accession {accession}.')
+        accession_name = MindiTool.extract_name(accession)
+        accession_id = MindiTool.extract_id(accession)
+        # accession_tmp_dir = self.tempdir.joinpath(accession_name)
+        accession_tmp_dir = tempfile.TemporaryDirectory(prefix=f"{accession_id}.{mode}.")
+        accession_tmp_dir_path = self.tempdir.joinpath(accession_tmp_dir.name)
+        # if accession_tmp_dir.is_dir():
+        #    shutil.rmtree(accession_tmp_dir)
+        cur_dir = os.getcwd()
+        # handle zipped files
+        if accession.name.endswith(".gz"):
+            # gzip compression strategy
+            with tempfile.NamedTemporaryFile(dir=accession_tmp_dir_path,
+                                             delete=False,
+                                             suffix='.fna') as unzipped_tmp:
+                with gzip.open(accession, 'rb') as handler:
+                    unzipped_tmp.write(handler.read())
+                accession = Path(unzipped_tmp.name).name
+        os.chdir(accession_tmp_dir_path)
+        rand_accession_name = str(uuid.uuid4())
+        match pattern:
+            case 'IR':
+                command = f"{self.nonBDNA} -seq {accession} -out {rand_accession_name}\
+                        -minIRrep {kwargs['IR']['minrep']} -maxIRspacer {kwargs['IR']['maxspacer']} \
+                        -skipAPR -skipSTR -skipMR -skipDR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
+            case 'MR':
+                command = f"{self.nonBDNA} -seq {accession} -out {rand_accession_name}\
+                        -minMRrep {kwargs['MR']['minrep']} -maxMRspacer {kwargs['MR']['maxspacer']} \
+                        -skipAPR -skipSTR -skipIR -skipDR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
+            case 'DR':
+                command = f"{self.nonBDNA} -seq {accession} -out {rand_accession_name}\
+                            -skipAPR -skipSTR -skipMR -skipIR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
+            case 'STR':
+                command = f"{self.nonBDNA} -seq {accession} -out {rand_accession_name}\
+                        -skipAPR -skipMR -skipIR -skipDR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
+            case 'DR|IR' | 'IR|DR':
+                command = f"{self.nonBDNA} -seq {accession} -out {rand_accession_name}\
+                        -minIRrep {kwargs['IR']['minrep']} -maxIRspacer {kwargs['IR']['maxspacer']} \
+                        -skipAPR -skipMR -skipDR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
+            case 'DR|MR' | 'MR|DR':
+                command = f"{self.nonBDNA} -seq {accession} -out {rand_accession_name}\
+                        -minMRrep {kwargs['IR']['minrep']} -maxMRspacer {kwargs['MR']['maxspacer']} \
+                        -skipAPR -skipIR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
+            case 'STR|DR' | 'DR|STR':
+                command = f"{self.nonBDNA} -seq {accession} -out {rand_accession_name}\
+                        -skipAPR -skipMR -skipIR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
+            case 'STR|IR' | 'IR|STR':
+                command = f"{self.nonBDNA} -seq {accession} -out {rand_accession_name}\
+                        -minIRrep {kwargs['IR']['minrep']} -maxIRspacer {kwargs['IR']['maxspacer']} \
+                        -skipAPR -skipMR -skipDR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
+            case 'STR|MR' | 'MR|STR':
+                command = f"{self.nonBDNA} -seq {accession} -out {rand_accession_name}\
+                                -minMRrep {kwargs['MR']['minrep']} -maxMRspacer {kwargs['MR']['maxspacer']}\
+                                -skipAPR -skipIR -skipDR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
+            case 'IR|MR' | 'MR|IR':
+                command = f"{self.nonBDNA} -seq {accession} -out {rand_accession_name}\
+                        -minMRrep {kwargs['MR']['minrep']} -maxMRspacer {kwargs['MR']['maxspacer']} \
+                        -minIRrep {kwargs['IR']['minrep']} -maxIRspacer {kwargs['IR']['maxspacer']} \
+                        -skipAPR -skipSTR -skipDR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
+            case 'IR|MR|STR' | 'STR|MR|IR' | 'MR|IR|STR' | 'STR|IR|MR' | 'IR|STR|MR' | 'MR|STR|IR':
+                command = f"{self.nonBDNA} -seq {accession} -out {rand_accession_name}\
+                        -minMRrep {kwargs['MR']['minrep']} -maxMRspacer {kwargs['MR']['maxspacer']}\
+                        -minIRrep {kwargs['IR']['minrep']} -maxIRspacer {kwargs['IR']['maxspacer']}\
+                        -skipAPR -skipDR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
+            case 'IR|MR|DR' | 'DR|MR|IR' | 'MR|IR|DR' | 'DR|IR|MR' | 'IR|DR|MR' | 'MR|DR|IR':
+                command = f"{self.nonBDNA} -seq {accession} -out {rand_accession_name}\
+                        -minMRrep {kwargs['MR']['minrep']} -maxMRspacer {kwargs['MR']['maxspacer']}\
+                        -minIRrep {kwargs['IR']['minrep']} -maxIRspacer {kwargs['IR']['maxspacer']}\
+                        -skipAPR -skipSTR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
+            case 'IR|STR|DR' | 'DR|STR|IR' | 'STR|IR|DR' | 'DR|IR|STR' | 'IR|DR|STR' | 'STR|DR|IR':
+                command = f"{self.nonBDNA} -seq {accession} -out {rand_accession_name}\
+                        -minIRrep {kwargs['IR']['minrep']} -maxIRspacer {kwargs['IR']['maxspacer']}\
+                        -skipAPR -skipMR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
+            case 'MR|STR|DR' | 'DR|STR|MR' | 'STR|MR|DR' | 'DR|MR|STR' | 'MR|DR|STR' | 'STR|DR|MR':
+                command = f"{self.nonBDNA} -seq {accession} -out {rand_accession_name}\
+                        -minMRrep {kwargs['MR']['minrep']} -maxMRspacer {kwargs['MR']['maxspacer']}\
+                        -skipAPR -skipIR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
+            case 'MR|STR|DR|IR':
+                command = f"{self.nonBDNA} -seq {accession} -out {rand_accession_name}\
+                        -minIRrep {kwargs['IR']['minrep']} -maxIRspacer {kwargs['IR']['maxspacer']}\
+                        -minMRrep {kwargs['MR']['minrep']} -maxMRspacer {kwargs['MR']['maxspacer']}\
+                        -skipAPR -skipGQ -skipZ -skipSlipped -skipCruciform -skipTriplex -skipWGET"
+            case _:
+                raise ValueError(f'Unknown pattern match {pattern}.')
+        _ = subprocess.run(command, shell=True,
+                                    check=True,
+                                    stdout=subprocess.DEVNULL,
+                                    # stderr=subprocess.DEVNULL,
+                            )
+        # check operation was succesful
+        for mode in pattern.split("|"):
             if not Path(rand_accession_name + f"_{mode}.tsv").is_file():
                 raise FileNotFoundError(f"Failed to extract {mode} for {accession}.")
             shutil.move(rand_accession_name + f"_{mode}.tsv", accession_name + f"_{mode}.tsv")
@@ -167,13 +214,15 @@ class MindiTool:
             destination = self.tempdir.joinpath(accession_name + f'_{mode}.tsv')
             if destination.is_file():
                 os.remove(destination)
+            out_tsv = accession_tmp_dir_path.joinpath(accession_name + f'_{mode}.tsv')
+            out_gff = accession_tmp_dir_path.joinpath(accession_name + f'_{mode}.gff')
             shutil.move(out_tsv, destination)
             # remove redundant files
             os.unlink(out_gff)
             os.chdir(cur_dir)
             # modify tmp file pointer
-            self.fn = self.tempdir.joinpath(accession_name + f'_{mode}.tsv')
-            return
+            self.fn[mode] = self.tempdir.joinpath(accession_name + f'_{mode}.tsv')
+        return
 
     def reset(self) -> None:
         self.fn = None
@@ -217,10 +266,20 @@ class MindiTool:
         self.cur_mode = 'IR'
         return self
 
-    def extract_MR(self, accession: str,
-                             min_arm_length: int = 10,
-                             max_spacer_length: int = 8
-                            ) -> "MindiTool":
+    def extract(self, accession: str, pattern: str, **kwargs):
+        pattern = set(pattern.split("|"))
+        for m in pattern:
+            if m == 'IR' or m == 'DR' or m == 'MR':
+                kwargs[m]['minrep'] = kwargs[m].get('minrep', MindiTool.defaults[m]['minrep'])
+                kwargs[m]['maxspacer'] = kwargs[m].get('maxspacer', MindiTool.defaults[m]['maxspacer'])
+
+        self._generate_repeats(accession=accession, pattern=pattern, **kwargs)
+        for mode in pattern:
+            self.process_table(mode=mode, **kwargs[mode])
+        return self
+
+    def extract_MR(self, accession: str, min_arm_length: int = 10, max_spacer_length: int = 8
+                        ) -> "MindiTool":
         self._generate_repeats(accession=accession, minrep=min_arm_length, maxspacer=max_spacer_length, mode="MR")
         self.process_table(min_arm_length=min_arm_length,
                             max_spacer_length=max_spacer_length)
@@ -356,7 +415,8 @@ class MindiTool:
     def _process_RTRF(self) -> "MindiTool":
         raise NotImplementedError()
 
-    def process_table(self, min_arm_length: Optional[int] = None,
+    def process_table(self, mode: str,
+                            min_arm_length: Optional[int] = None,
                             max_spacer_length: Optional[int] = None,
                             ) -> "MindiTool":
         to_drop = ["Source",
@@ -375,7 +435,7 @@ class MindiTool:
                                                delete=False,
                                                mode="w"
                                             )
-        self.fnp = tmp_file.name
+        self.fnp[mode] = tmp_file.name
         nucleotides = {'a', 'g', 'c', 't'}
         with tmp_file as fout:
             fout_writer = csv.DictWriter(
@@ -385,7 +445,7 @@ class MindiTool:
                                          )
 
             fout_writer.writeheader()
-            with open(self.fn, mode="r", encoding="UTF-8") as fh:
+            with open(self.fn[mode], mode="r", encoding="UTF-8") as fh:
                 reader = csv.DictReader(fh, delimiter="\t")
                 for row in reader:
                     arm_length = int(row['Repeat'])

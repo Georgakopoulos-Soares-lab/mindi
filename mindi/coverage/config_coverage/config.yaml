@@ -1,0 +1,20 @@
+buckets: 2
+out: 'repeat_out'
+files: 'filtered_assemblies.txt'
+tempdir: '/tmp'
+DESIGN: 'design.csv'
+mode: 'template'
+compartment: 'gene'
+window_size: 500
+log_sleep: 300
+strand_evaluator: 'G4'
+split_category: ''
+split_collection: []
+
+# statistics
+alpha: 0.05
+N: 1000
+
+minrep: 8
+max_spacer_length: 8
+min_arm_length: 10

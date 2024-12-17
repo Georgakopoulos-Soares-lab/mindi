@@ -151,7 +151,11 @@ class GFFCleaner:
         # 1-base -> 0-base transformation
         gff_df.loc[:, "start"] = gff_df["start"] - 1
         if biotype:
-            gff_df.loc[:, "biotype"] = gff_df["attributes"].apply(GFFCleaner.parse_biotype)
+            gff_df.loc[:, "biotype_full"] = gff_df["attributes"].apply(GFFCleaner.parse_biotype)
+            gff_df.loc[:, "biotype"] = gff_df["biotype_full"]\
+                            .apply(lambda x: "protein_coding" \
+                                    if x == "protein_coding" \
+                                    else "non_coding")
         if parse_ids:
             gff_df.loc[:, "compartment_id"] = gff_df["attributes"].apply(GFFCleaner.parse_id)
         if parse_parent:
@@ -280,7 +284,7 @@ class GFFCleaner:
                     intron_attributes = GFFCleaner.parse_attributes(intron_attributes)
                     if i == 0 and isoform_start < exon_start:
                         intron_start = isoform_start
-                        intron_end = exon_start - 1
+                        intron_end = exon_start
                         inserted_introns += 1
                         intron_attributes.update({"number": inserted_introns})
                         intron_attributes = GFFCleaner.marshal(intron_attributes)
@@ -299,7 +303,7 @@ class GFFCleaner:
                         intron_attributes.update({"number": inserted_introns})
                         intron_attributes = GFFCleaner.marshal(intron_attributes)
                         intron_start = group[i-1]["end"]
-                        intron_end = exon_start - 1
+                        intron_end = exon_start
                         processed_compartments.append({
                                               "seqID": current_seqID,
                                               "compartment": "intron",
@@ -348,25 +352,24 @@ class GFFCleaner:
             updated_gff = BedTool.from_dataframe(updated_gff).sort()
             return updated_gff 
         return updated_gff
-
     
-    @lru_cache(maxsize=1)
+    # @lru_cache(maxsize=1)
     def read(self, gff: Union[os.PathLike[str], str],
-                    add_exons: bool = True,
+                    add_exons: bool = False,
                     merge_compartments: bool = True,
                     is_merged: bool = False,
                     partition_on_biotype: bool = True) -> pd.DataFrame:
         gff = Path(gff).resolve()
         gff_name = gff.name.split('.gff')[0]
         if add_exons:
-            reading_temp_dir = tempfile.TemporaryDirectory(prefix=gff_name + ".", dir=self.tempdir)
+            reading_temp_dir = tempfile.TemporaryDirectory(prefix=gff_name + ".", 
+                                                           dir=self.tempdir)
             with tempfile.NamedTemporaryFile(
                                              prefix=gff_name + ".",
                                              suffix=".agat",
                                              dir=reading_temp_dir.name,
                                              delete=True
                                             ) as tmp:
-
                 if Path(tmp.name).is_file():
                     os.remove(tmp.name)
                 filename = Path(tmp.name).name
@@ -400,7 +403,6 @@ class GFFCleaner:
                 gff_df = self.read_gff(gff, biotype=partition_on_biotype)
                 if merge_compartments:
                     gff_df = self.merge_compartments(gff_df)
-
         pybedtools.helpers.cleanup(verbose=False, remove_all=False)
         return gff_df
 
@@ -408,29 +410,31 @@ class GFFCleaner:
         merged_gff = []
         merge_columns = ["seqID", "start", "end", "compartment", "source"]
         for compartment, biotype in self.all_compartments:
+            # when merging genes add also pseudogenes
             if compartment == "gene":
                 temp_comp = gff_df[(gff_df["compartment"] == compartment) | (gff_df["compartment"] == "pseudogene")]
                 temp_comp.loc[:, "compartment"] = temp_comp["compartment"].replace("pseudogene", compartment)
             else:
                 temp_comp = gff_df[gff_df["compartment"] == compartment]
+            
+            # when biotype has been specified, filter the non-relevent genes
             if biotype is not None:
                 temp_comp = temp_comp[temp_comp["biotype"] == biotype]
+
+            # if no entries were found, skip this (compartment, biotype) combination
             if temp_comp.shape[0] == 0:
                 continue
             # temp_comp.reset_index(drop=True, inplace=True)
-            merged_tool = (
+            merged_gff_comp = pd.read_table(
                         BedTool.from_dataframe(temp_comp[merge_columns])\
                             .sort()
                             .merge(
                                     c=[4, 5],
                                     o=["count", "distinct"]
-                            )
+                            ).fn,
+                            header=None,
+                            names=["seqID", "start", "end", "overlapCount", "source"]
                     )
-            merged_gff_comp = pd.read_table(
-                                merged_tool.fn,
-                                header=None,
-                                names=["seqID", "start", "end", "overlapCount", "source"]
-                                )
             merged_gff_comp.loc[:, "compartment"] = compartment
             merged_gff_comp.loc[:, "biotype"] = biotype if biotype else "."
             merged_gff.append(merged_gff_comp)
